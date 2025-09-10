@@ -209,3 +209,48 @@ def get_collection_info() -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Error getting collection info for '{name}': {e}")
         return None
+
+def search_by_file_path(file_path: str) -> List[Dict[str, Any]]:
+    """
+    Search for all points associated with a specific file path.
+    
+    Args:
+        file_path: Absolute path to the file
+        
+    Returns:
+        List of all points/chunks for the specified file
+    """
+    name = _settings.QDRANT_COLLECTION
+    
+    try:
+        # Use scroll to get all points with matching file_path
+        scroll_filter = qm.Filter(
+            must=[
+                qm.FieldCondition(
+                    key="file_path",
+                    match=qm.MatchValue(value=file_path)
+                )
+            ]
+        )
+        
+        points, _ = _client.scroll(
+            collection_name=name,
+            scroll_filter=scroll_filter,
+            limit=10000,  # Large limit to get all chunks for a file
+            with_payload=True,
+            with_vectors=False
+        )
+        
+        results = []
+        for point in points:
+            results.append({
+                "id": point.id,
+                "payload": point.payload or {}
+            })
+        
+        logger.info(f"Found {len(results)} chunks for file: {file_path}")
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error searching by file path '{file_path}': {e}")
+        return []
