@@ -4,7 +4,7 @@ const db = new Database(DB_PATH);
 
 module.exports = {
   addDirectory(path) {
-    const stmt = db.prepare('INSERT OR IGNORE INTO directories (path, added_at) VALUES (?, datetime("now"))');
+    const stmt = db.prepare("INSERT OR IGNORE INTO directories (path, added_at) VALUES (?, datetime('now'))");
     stmt.run(path);
     const row = db.prepare('SELECT * FROM directories WHERE path = ?').get(path);
     return row;
