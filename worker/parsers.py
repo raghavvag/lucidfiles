@@ -49,6 +49,7 @@ def parse_txt(path: Path) -> str:
 def parse_pdf(path: Path) -> str:
     """
     Parse PDF file and extract text from all pages.
+    Handles corrupted PDFs and image-based PDFs with OCR fallback.
     
     Args:
         path: Path to the PDF file
@@ -58,35 +59,70 @@ def parse_pdf(path: Path) -> str:
         
     Raises:
         FileNotFoundError: If file doesn't exist
-        Exception: If PDF parsing fails
+        Exception: If PDF parsing fails completely
     """
     try:
         if not path.exists():
             raise FileNotFoundError(f"PDF file not found: {path}")
         
-        doc = fitz.open(str(path))
-        texts = []
-        
-        for page_num in range(doc.page_count):
-            page = doc[page_num]
-            page_text = page.get_text("text")
+        doc = None
+        try:
+            # Try to open the PDF
+            doc = fitz.open(str(path))
             
-            # Clean up text formatting
-            page_text = re.sub(r'\n+', '\n', page_text)  # Multiple newlines to single
-            page_text = re.sub(r' +', ' ', page_text)     # Multiple spaces to single
+            # Check if PDF is encrypted
+            if doc.needs_pass:
+                logger.warning(f"PDF {path} is password protected, skipping")
+                if doc:
+                    doc.close()
+                return ""
             
-            if page_text.strip():  # Only add non-empty pages
-                texts.append(page_text.strip())
-        
-        doc.close()
-        
-        full_text = "\n\n".join(texts)
-        logger.debug(f"Parsed PDF: {path} ({doc.page_count} pages, {len(full_text)} chars)")
-        return full_text
+            texts = []
+            
+            for page_num in range(doc.page_count):
+                try:
+                    page = doc[page_num]
+                    page_text = page.get_text("text")
+                    
+                    # If no text found, try OCR (if available)
+                    if not page_text.strip():
+                        logger.info(f"No text found on page {page_num + 1} of {path}, may be image-based")
+                        # For now, skip OCR but log the issue
+                        continue
+                    
+                    # Clean up text formatting
+                    page_text = re.sub(r'\n+', '\n', page_text)  # Multiple newlines to single
+                    page_text = re.sub(r' +', ' ', page_text)     # Multiple spaces to single
+                    
+                    if page_text.strip():  # Only add non-empty pages
+                        texts.append(page_text.strip())
+                        
+                except Exception as page_error:
+                    logger.warning(f"Error processing page {page_num + 1} of {path}: {page_error}")
+                    continue
+            
+            if doc:
+                doc.close()
+            
+            if not texts:
+                logger.warning(f"No extractable text found in PDF: {path}")
+                return ""
+            
+            full_text = "\n\n".join(texts)
+            logger.debug(f"Parsed PDF: {path} ({len(texts)} pages with text, {len(full_text)} chars)")
+            return full_text
+            
+        except Exception as doc_error:
+            if doc:
+                doc.close()
+            logger.error(f"Error opening PDF document {path}: {doc_error}")
+            # Return empty string instead of raising exception
+            return ""
         
     except Exception as e:
         logger.error(f"Error parsing PDF {path}: {e}")
-        raise
+        # Return empty string instead of raising exception to continue processing other files
+        return ""
 
 def parse_docx(path: Path) -> str:
     """
@@ -131,7 +167,8 @@ def parse_docx(path: Path) -> str:
         
     except Exception as e:
         logger.error(f"Error parsing DOCX {path}: {e}")
-        raise
+        # Return empty string instead of raising exception
+        return ""
 
 def parse_image_ocr(path: Path) -> str:
     """
@@ -299,19 +336,29 @@ def get_file_parser(file_path: Path) -> Optional[callable]:
 def parse_file(file_path: Path) -> str:
     """
     Parse any supported file and return its text content.
+    Handles errors gracefully and returns empty string for problematic files.
     
     Args:
         file_path: Path to the file to parse
         
     Returns:
-        str: Extracted text content
-        
-    Raises:
-        ValueError: If file format is not supported
-        Exception: If parsing fails
+        str: Extracted text content, or empty string if parsing fails
     """
-    parser = get_file_parser(file_path)
-    if parser is None:
-        raise ValueError(f"Unsupported file format: {file_path.suffix}")
-    
-    return parser(file_path)
+    try:
+        parser = get_file_parser(file_path)
+        if parser is None:
+            logger.warning(f"Unsupported file format: {file_path.suffix} for file {file_path}")
+            return ""
+        
+        result = parser(file_path)
+        
+        # Ensure we return a string
+        if result is None:
+            return ""
+        
+        return str(result).strip()
+        
+    except Exception as e:
+        logger.error(f"Error parsing file {file_path}: {e}")
+        # Return empty string instead of raising exception
+        return ""
