@@ -1,18 +1,53 @@
 /* Glass morphism and neon effects for Semantic File Explorer 2.0 */
 
-/* Light Mode Glass Effects */
+/* Light Mode Glass Effects - Pure White */
 .glass {
-  background: rgba(255, 255, 255, 0.8);
+  background: #ffffff;
   backdrop-filter: blur(20px);
   border: 1px solid rgba(14, 165, 233, 0.2);
   box-shadow: 0 8px 32px rgba(14, 165, 233, 0.1);
+  color: #1e293b;
 }
 
 .glass-dark {
-  background: rgba(255, 255, 255, 0.9);
+  background: #ffffff;
   backdrop-filter: blur(20px);
   border: 1px solid rgba(14, 165, 233, 0.3);
-  box-shadow: 0 8px 32px rgba(14, 165, 233, 0.1);
+  box-shadow: 0 8px 32px rgba(14, 165, 233, 0.15);
+  color: #1e293b;
+}
+
+/* Light mode specific overrides - Force white backgrounds */
+body.light .glass,
+body.light .glass-dark {
+  background: #ffffff !important;
+  color: #1e293b !important;
+}
+
+body.light aside,
+body.light main,
+body.light header {
+  background: #ffffff !important;
+}
+
+/* Light mode specific text colors */
+body.light {
+  color: #1e293b;
+}
+
+body.light h1,
+body.light h2,
+body.light h3,
+body.light .text-gray-800 {
+  color: #1e293b !important;
+}
+
+body.light .text-gray-600 {
+  color: #475569 !important;
+}
+
+body.light .text-gray-700 {
+  color: #374151 !important;
 }
 
 /* Dark Mode Glass Effects */
@@ -39,8 +74,8 @@
 }
 
 .neumorphic {
-  background: linear-gradient(145deg, #f1f5f9, #e2e8f0);
-  box-shadow: 20px 20px 60px #cbd5e1, -20px -20px 60px #ffffff;
+  background: #ffffff;
+  box-shadow: 20px 20px 60px #e2e8f0, -20px -20px 60px #ffffff;
 }
 
 .neumorphic-dark {

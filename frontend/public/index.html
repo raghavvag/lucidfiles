@@ -12,9 +12,9 @@
   <title>Semantic File Explorer 2.0</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
   <script>
     tailwind.config = {
+      darkMode: 'class',
       theme: {
         extend: {
           fontFamily: {
@@ -94,7 +94,15 @@
       font-family: 'Inter', sans-serif;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
-      background-color: #f8fafc;
+      transition: background-color 0.3s ease;
+    }
+    
+    body.light {
+      background-color: #ffffff;
+    }
+    
+    body.dark {
+      background-color: #0f172a;
     }
     
     #root {
@@ -107,7 +115,17 @@
       justify-content: center;
       align-items: center;
       height: 100vh;
-      background-color: #f8fafc;
+      transition: background-color 0.3s ease;
+    }
+    
+    body.light .loading {
+      background-color: #ffffff;
+      color: #1e293b;
+    }
+    
+    body.dark .loading {
+      background-color: #0f172a;
+      color: #f1f5f9;
     }
   </style>
 </head>
@@ -118,5 +136,15 @@
       <div>Loading Semantic File Explorer...</div>
     </div>
   </div>
+  <script>
+    // Initialize theme on page load
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    if (savedTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+      document.body.classList.add('dark');
+    } else {
+      document.body.classList.add('light');
+    }
+  </script>
 </body>
 </html>

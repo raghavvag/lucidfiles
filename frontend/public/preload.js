@@ -13,7 +13,42 @@ contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
   
   // App version info  
-  getVersion: () => ipcRenderer.invoke('get-version')
+  getVersion: () => ipcRenderer.invoke('get-version'),
+  
+  // Theme persistence for Electron
+  getTheme: async () => {
+    try {
+      // First try IPC, then fallback to localStorage
+      const ipcTheme = await ipcRenderer.invoke('get-theme');
+      if (ipcTheme) return ipcTheme;
+      
+      return localStorage.getItem('theme') || 'light';
+    } catch (error) {
+      console.error('Error getting theme:', error);
+      try {
+        return localStorage.getItem('theme') || 'light';
+      } catch {
+        return 'light';
+      }
+    }
+  },
+  
+  setTheme: async (theme) => {
+    try {
+      // Store in both IPC and localStorage
+      await ipcRenderer.invoke('set-theme', theme);
+      localStorage.setItem('theme', theme);
+      return true;
+    } catch (error) {
+      console.error('Error setting theme:', error);
+      try {
+        localStorage.setItem('theme', theme);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
 });
 
 // Expose a simple API for React to use
