@@ -1,15 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { FileCode, FileText, Database, Filter, Eye, Download, Share, Trash } from 'lucide-react';
 
 const ResultsList = ({ results = [], query, onResultSelect }) => {
   const [hoveredCard, setHoveredCard] = useState(null);
-
-  useEffect(() => {
-    // Initialize Lucide icons
-    if (window.lucide) {
-      window.lucide.createIcons();
-    }
-  }, []);
 
   const getFileIcon = (type) => {
     switch (type) {

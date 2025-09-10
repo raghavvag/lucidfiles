@@ -1,14 +1,7 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Brain, Hash } from 'lucide-react';
 
 const PreviewPane = ({ activeTab, onTabSwitch, selectedFile }) => {
-
-  useEffect(() => {
-    // Initialize Lucide icons
-    if (window.lucide) {
-      window.lucide.createIcons();
-    }
-  }, [activeTab]);
 
   const handleAskAI = () => {
     // Placeholder for AI functionality

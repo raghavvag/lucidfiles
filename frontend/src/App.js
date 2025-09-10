@@ -1,8 +1,8 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
-import ResultsList from './components/ResultsList';
-import PreviewPane from './components/PreviewPane';
+import ResultsList from './components/ResultsList_New';
+import PreviewPane from './components/PreviewPane_New';
 import { useTheme } from './hooks/useTheme';
 import { useUIState } from './hooks/useUIState';
 import './index.css';
@@ -18,16 +18,8 @@ function App() {
     toggleCoPilot,
     switchTab,
     toggleSection,
-    handleSearch,
     setSearchQuery
   } = useUIState();
-
-  useEffect(() => {
-    // Initialize Lucide icons when component mounts
-    if (window.lucide) {
-      window.lucide.createIcons();
-    }
-  }, []);
 
   const handleResultSelect = (result) => {
     console.log('Selected result:', result);
@@ -35,7 +27,7 @@ function App() {
   };
 
   return (
-    <div className={`h-screen bg-white dark:bg-gradient-to-br dark:from-electric-900 dark:via-electric-800 dark:to-cyber-900 overflow-hidden font-inter cyber-grid transition-all duration-500 ${isDarkMode ? 'dark' : ''}`}>
+    <div className={`h-screen overflow-hidden font-inter transition-all duration-500 ${isDarkMode ? 'dark cyber-grid' : ''}`}>
       {/* Global Header Bar */}
       <Header 
         searchQuery={searchQuery}

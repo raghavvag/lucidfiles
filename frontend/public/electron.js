@@ -13,7 +13,9 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       enableRemoteModule: false,
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'preload.js'),
+      webSecurity: false, // Allow local storage access
+      allowRunningInsecureContent: true
     },
     icon: path.join(__dirname, '../build/icon.png'), // You can add an icon later
     titleBarStyle: 'default',
@@ -54,6 +56,18 @@ ipcMain.handle('select-folder', async () => {
     return result.filePaths[0];
   }
   return null;
+});
+
+// IPC handlers for theme management
+let currentTheme = 'light';
+
+ipcMain.handle('get-theme', () => {
+  return currentTheme;
+});
+
+ipcMain.handle('set-theme', (event, theme) => {
+  currentTheme = theme;
+  return true;
 });
 
 ipcMain.handle('select-files', async () => {

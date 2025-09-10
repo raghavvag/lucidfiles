@@ -1,16 +1,9 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Search, Sun, Moon, Settings } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 
 const Header = ({ searchQuery, onSearchChange }) => {
   const { isDarkMode, toggleTheme } = useTheme();
-
-  useEffect(() => {
-    // Initialize Lucide icons after component mounts
-    if (window.lucide) {
-      window.lucide.createIcons();
-    }
-  }, [isDarkMode]);
 
   const handleSearchInput = (e) => {
     const value = e.target.value;
@@ -57,9 +50,9 @@ const Header = ({ searchQuery, onSearchChange }) => {
           onClick={toggleTheme}
         >
           {isDarkMode ? (
-            <Moon className="w-5 h-5 text-cyber-400 transition-all duration-300" />
+            <Sun className="w-5 h-5 text-yellow-400 transition-all duration-300" />
           ) : (
-            <Sun className="w-5 h-5 text-neon-600 transition-all duration-300" />
+            <Moon className="w-5 h-5 text-blue-600 transition-all duration-300" />
           )}
         </button>
         <button className="p-2 rounded-lg glass hover:bg-white/20 transition-all duration-300">
