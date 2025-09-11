@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import ResultsList from './components/ResultsList_New';
@@ -23,6 +23,7 @@ function App() {
   } = useUIState();
   
   const { results, isSearching, search, clearResults } = useSearch();
+  const [selectedFile, setSelectedFile] = useState(null);
 
   // Debounced search effect
   useEffect(() => {
@@ -46,7 +47,8 @@ function App() {
 
   const handleResultSelect = (result) => {
     console.log('Selected result:', result);
-    // Switch to preview tab when a result is selected
+    // Set the selected file and switch to preview tab
+    setSelectedFile(result);
     switchTab('preview');
   };
 
@@ -80,6 +82,7 @@ function App() {
         <PreviewPane 
           activeTab={activeTab}
           onTabSwitch={switchTab}
+          selectedFile={selectedFile}
         />
       </div>
     </div>

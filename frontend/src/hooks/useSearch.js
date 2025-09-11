@@ -38,17 +38,41 @@ export const useSearch = () => {
       if (response.ok && response.results) {
         // Transform backend results to match frontend format
         const transformedResults = response.results.results || [];
-        const formattedResults = transformedResults.map((result, index) => ({
-          id: `search-${index}`,
-          filename: result.file_name || 'Unknown',
-          filePath: result.file_path || '',
-          type: getFileType(result.file_name || ''),
-          match: Math.round((result.score || 0) * 100),
-          description: result.chunk || 'No description available',
-          chunkIndex: result.chunk_index || 0,
-          fileSize: result.file_size || 0,
-          chunkSize: result.chunk_size || 0,
-        }));
+        
+        // Find the highest score to normalize against
+        const scores = transformedResults.map(result => result.score || 0);
+        const maxScore = Math.max(...scores);
+        const minScore = Math.min(...scores);
+        
+        const formattedResults = transformedResults.map((result, index) => {
+          // Normalize score relative to the highest score
+          let normalizedMatch;
+          if (maxScore === minScore) {
+            // All scores are the same, so all get 100%
+            normalizedMatch = 100;
+          } else if (maxScore > 0) {
+            // Normalize so highest score = 100%, others relative to it
+            normalizedMatch = Math.round(((result.score || 0) / maxScore) * 100);
+          } else {
+            // Handle case where all scores are negative or zero
+            normalizedMatch = Math.round((((result.score || 0) - minScore) / (maxScore - minScore)) * 100);
+          }
+          
+          // Ensure minimum 1% for any result that was returned
+          normalizedMatch = Math.max(1, normalizedMatch);
+          
+          return {
+            id: `search-${index}`,
+            filename: result.file_name || 'Unknown',
+            filePath: result.file_path || '',
+            type: getFileType(result.file_name || ''),
+            match: normalizedMatch,
+            description: result.chunk || 'No description available',
+            chunkIndex: result.chunk_index || 0,
+            fileSize: result.file_size || 0,
+            chunkSize: result.chunk_size || 0,
+          };
+        });
 
         setResults(formattedResults);
       } else {

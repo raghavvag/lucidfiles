@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Brain, Hash } from 'lucide-react';
+import { Brain } from 'lucide-react';
 import { useSearch } from '../hooks/useSearch';
+import FileViewer from './FileViewer';
 
 const PreviewPane = ({ activeTab, onTabSwitch, selectedFile }) => {
   const [aiQuestion, setAiQuestion] = useState('');
@@ -50,42 +51,11 @@ const PreviewPane = ({ activeTab, onTabSwitch, selectedFile }) => {
 
       {/* Preview Tab Content */}
       {activeTab === 'preview' && (
-        <div className="flex-1 p-4 overflow-y-auto">
-          <div className="space-y-4">
-            <div className="glass rounded-lg p-4">
-              <h3 className="font-semibold text-gray-800 dark:text-white mb-2">neural_network.py</h3>
-              <div className="font-mono text-sm space-y-2">
-                <div className="text-gray-600 dark:text-gray-300">
-                  <span className="text-blue-600 dark:text-blue-400">import</span> numpy <span className="text-blue-600 dark:text-blue-400">as</span> np<br/>
-                  <span className="text-blue-600 dark:text-blue-400">import</span> tensorflow <span className="text-blue-600 dark:text-blue-400">as</span> tf
-                </div>
-                <div className="bg-yellow-200/20 dark:bg-yellow-500/20 p-2 rounded border-l-4 border-yellow-500">
-                  <span className="text-blue-600 dark:text-blue-400">class</span> <span className="text-green-600 dark:text-green-400">NeuralNetwork</span>:
-                </div>
-                <div className="text-gray-600 dark:text-gray-300 ml-4">
-                  <span className="text-blue-600 dark:text-blue-400">def</span> <span className="text-green-600 dark:text-green-400">__init__</span>(self, layers):
-                </div>
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <h4 className="font-medium text-gray-800 dark:text-white">Quick Navigation</h4>
-              <div className="space-y-1">
-                <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10 transition-all duration-300 text-sm text-gray-600 dark:text-gray-300">
-                  <Hash className="w-3 h-3 inline mr-2" />
-                  Class Definition (Line 15)
-                </button>
-                <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10 transition-all duration-300 text-sm text-gray-600 dark:text-gray-300">
-                  <Hash className="w-3 h-3 inline mr-2" />
-                  Forward Pass (Line 42)
-                </button>
-                <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/10 transition-all duration-300 text-sm text-gray-600 dark:text-gray-300">
-                  <Hash className="w-3 h-3 inline mr-2" />
-                  Backpropagation (Line 78)
-                </button>
-              </div>
-            </div>
-          </div>
+        <div className="flex-1 overflow-hidden">
+          <FileViewer 
+            selectedFile={selectedFile}
+            onError={(error) => console.error('File viewer error:', error)}
+          />
         </div>
       )}
 

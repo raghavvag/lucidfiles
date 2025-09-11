@@ -6,8 +6,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   selectFiles: () => ipcRenderer.invoke('select-files'),
   
-  // You can add more IPC methods here as needed
+  // File operations
   openFile: (filePath) => ipcRenderer.invoke('open-file', filePath),
+  openWindowsPreview: (filePath) => ipcRenderer.invoke('open-windows-preview', filePath),
+  showInExplorer: (filePath) => ipcRenderer.invoke('show-in-explorer', filePath),
+  readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
+  getFileStats: (filePath) => ipcRenderer.invoke('get-file-stats', filePath),
   
   // Platform info
   platform: process.platform,
@@ -59,6 +63,10 @@ contextBridge.exposeInMainWorld('electron', {
   
   // File operations
   openFile: (filePath) => ipcRenderer.invoke('open-file', filePath),
+  openWindowsPreview: (filePath) => ipcRenderer.invoke('open-windows-preview', filePath),
+  showInExplorer: (filePath) => ipcRenderer.invoke('show-in-explorer', filePath),
+  readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
+  getFileStats: (filePath) => ipcRenderer.invoke('get-file-stats', filePath),
   
   // Platform info
   platform: process.platform,

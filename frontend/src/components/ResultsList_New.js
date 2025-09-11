@@ -212,8 +212,8 @@ const ResultsList = ({ results = [], query, isSearching, onResultSelect }) => {
                       {result.match}% match
                     </span>
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
-                    {result.description}
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                    {result.filePath}
                   </p>
                   <div className="flex items-center space-x-2">
                     <button 
@@ -227,7 +227,7 @@ const ResultsList = ({ results = [], query, isSearching, onResultSelect }) => {
                       onClick={() => handleFileOperation('reindex', result.filePath, result.filename)}
                       disabled={isProcessing}
                     >
-                      {isProcessing ? 'Processing...' : 'Reindex'}
+                      {isProcessing ? 'Processing...' : 'Summarize'}
                     </button>
                     <button className="px-3 py-1 rounded-lg bg-electric-500/20 text-electric-700 dark:text-electric-400 text-xs font-medium hover:bg-electric-500/30 transition-all duration-300 hover:animate-pulse">
                       Pin
@@ -252,7 +252,7 @@ const ResultsList = ({ results = [], query, isSearching, onResultSelect }) => {
                     className="w-8 h-8 rounded-full bg-cyber-500/20 flex items-center justify-center hover:bg-cyber-500/40 transition-all duration-300 hover:animate-pulse"
                     onClick={() => handleFileOperation('reindex', result.filePath, result.filename)}
                     disabled={isProcessing}
-                    title="Reindex file"
+                    title="Summarize file"
                   >
                     <RefreshCw className="w-4 h-4 text-cyber-600 dark:text-cyber-400" />
                   </button>
