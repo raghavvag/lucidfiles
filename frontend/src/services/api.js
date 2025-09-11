@@ -1,0 +1,176 @@
+/**
+ * API Service for communicating with the backend
+ * Handles all HTTP requests to the Node.js backend which communicates with the Python worker
+ */
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000/api';
+
+class APIError extends Error {
+  constructor(message, status, data) {
+    super(message);
+    this.name = 'APIError';
+    this.status = status;
+    this.data = data;
+  }
+}
+
+const apiRequest = async (endpoint, options = {}) => {
+  const url = `${API_BASE_URL}${endpoint}`;
+  const config = {
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+    ...options,
+  };
+
+  try {
+    const response = await fetch(url, config);
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new APIError(
+        errorData.error || `HTTP ${response.status}: ${response.statusText}`,
+        response.status,
+        errorData
+      );
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    if (error instanceof APIError) {
+      throw error;
+    }
+    
+    // Handle network errors
+    throw new APIError(
+      `Network error: ${error.message}`,
+      0,
+      { originalError: error.message }
+    );
+  }
+};
+
+export const apiService = {
+  // Directory Management
+  directories: {
+    /**
+     * Set/add a directory for watching and indexing
+     * @param {string} path - Directory path to watch
+     * @returns {Promise<Object>} Directory info
+     */
+    async set(path) {
+      return apiRequest('/set-directory', {
+        method: 'POST',
+        body: JSON.stringify({ path }),
+      });
+    },
+
+    /**
+     * Get list of all watched directories
+     * @returns {Promise<Array>} List of directories
+     */
+    async list() {
+      return apiRequest('/directories', {
+        method: 'GET',
+      });
+    },
+
+    /**
+     * Remove a directory from watching
+     * @param {string} path - Directory path to remove
+     * @returns {Promise<Object>} Success response
+     */
+    async remove(path) {
+      return apiRequest('/remove-directory', {
+        method: 'DELETE',
+        body: JSON.stringify({ path }),
+      });
+    },
+  },
+
+  // File Operations
+  files: {
+    /**
+     * Index a single file
+     * @param {string} path - File path to index
+     * @returns {Promise<Object>} Indexing result
+     */
+    async index(path) {
+      return apiRequest('/index-file', {
+        method: 'POST',
+        body: JSON.stringify({ path }),
+      });
+    },
+
+    /**
+     * Reindex a file (update existing index)
+     * @param {string} path - File path to reindex
+     * @returns {Promise<Object>} Reindexing result
+     */
+    async reindex(path) {
+      return apiRequest('/reindex-file', {
+        method: 'POST',
+        body: JSON.stringify({ path }),
+      });
+    },
+
+    /**
+     * Remove a file from the index
+     * @param {string} path - File path to remove
+     * @returns {Promise<Object>} Removal result
+     */
+    async remove(path) {
+      return apiRequest('/remove-file', {
+        method: 'DELETE',
+        body: JSON.stringify({ path }),
+      });
+    },
+  },
+
+  // Search Operations
+  search: {
+    /**
+     * Perform semantic search across indexed files
+     * @param {string} query - Search query
+     * @param {number} topK - Number of results to return (default: 5)
+     * @returns {Promise<Object>} Search results
+     */
+    async semantic(query, topK = 5) {
+      return apiRequest('/search', {
+        method: 'POST',
+        body: JSON.stringify({ query, top_k: topK }),
+      });
+    },
+
+    /**
+     * Ask AI a question about the indexed content
+     * @param {string} question - Question to ask
+     * @param {number} topK - Number of context results to use (default: 5)
+     * @returns {Promise<Object>} AI response
+     */
+    async ask(question, topK = 5) {
+      return apiRequest('/ask', {
+        method: 'POST',
+        body: JSON.stringify({ question, top_k: topK }),
+      });
+    },
+  },
+
+  // Health Check
+  health: {
+    /**
+     * Check if the backend is healthy
+     * @returns {Promise<Object>} Health status
+     */
+    async check() {
+      return apiRequest('/health', {
+        method: 'GET',
+      });
+    },
+  },
+};
+
+export { APIError };
+export default apiService;

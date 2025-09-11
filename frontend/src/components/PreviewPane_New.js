@@ -1,11 +1,29 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Brain, Hash } from 'lucide-react';
+import { useSearch } from '../hooks/useSearch';
 
 const PreviewPane = ({ activeTab, onTabSwitch, selectedFile }) => {
+  const [aiQuestion, setAiQuestion] = useState('');
+  const [aiResponse, setAiResponse] = useState('');
+  const [isAskingAI, setIsAskingAI] = useState(false);
+  const { askAI } = useSearch();
 
-  const handleAskAI = () => {
-    // Placeholder for AI functionality
-    console.log('AI question submitted');
+  const handleAskAI = async () => {
+    if (!aiQuestion.trim()) return;
+    
+    setIsAskingAI(true);
+    try {
+      const result = await askAI(aiQuestion);
+      if (result.success) {
+        setAiResponse(result.answer);
+      } else {
+        setAiResponse(`Error: ${result.error}`);
+      }
+    } catch (err) {
+      setAiResponse('Failed to get AI response. Please try again.');
+    } finally {
+      setIsAskingAI(false);
+    }
   };
 
   return (
@@ -111,14 +129,28 @@ const PreviewPane = ({ activeTab, onTabSwitch, selectedFile }) => {
                 <input 
                   type="text" 
                   placeholder="Ask about this file..." 
+                  value={aiQuestion}
+                  onChange={(e) => setAiQuestion(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && !isAskingAI && handleAskAI()}
                   className="w-full px-3 py-2 rounded-lg glass neon-border text-sm text-gray-800 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-neon-500/50 dark:focus:ring-cyber-500/50 animate-neon-pulse"
                 />
                 <button 
                   onClick={handleAskAI}
-                  className="w-full px-4 py-2 rounded-lg bg-gradient-to-r from-neon-500 to-cyber-500 text-white text-sm font-medium hover:from-neon-600 hover:to-cyber-600 transition-all duration-300 animate-pulse-glow"
+                  disabled={isAskingAI || !aiQuestion.trim()}
+                  className="w-full px-4 py-2 rounded-lg bg-gradient-to-r from-neon-500 to-cyber-500 text-white text-sm font-medium hover:from-neon-600 hover:to-cyber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 animate-pulse-glow"
                 >
-                  Ask AI
+                  {isAskingAI ? 'Asking AI...' : 'Ask AI'}
                 </button>
+                
+                {/* AI Response */}
+                {aiResponse && (
+                  <div className="mt-4 p-3 rounded-lg glass">
+                    <h5 className="font-medium text-gray-800 dark:text-white mb-2">AI Response:</h5>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+                      {aiResponse}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

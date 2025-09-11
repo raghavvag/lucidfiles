@@ -5,7 +5,8 @@ export const useUIState = () => {
   const [activeTab, setActiveTab] = useState('preview');
   const [collapsedSections, setCollapsedSections] = useState({
     projects: false,
-    memory: false
+    memory: false,
+    addDirectory: false
   });
   const [searchQuery, setSearchQuery] = useState('');
 

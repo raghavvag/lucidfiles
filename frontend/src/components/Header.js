@@ -13,11 +13,14 @@ const Header = ({ searchQuery, onSearchChange }) => {
     if (value.length > 0) {
       if (isDarkMode) {
         e.target.style.boxShadow = '0 0 20px rgba(217, 70, 239, 0.4)';
+        e.target.style.borderColor = 'rgba(217, 70, 239, 0.6)';
       } else {
         e.target.style.boxShadow = '0 0 20px rgba(14, 165, 233, 0.4)';
+        e.target.style.borderColor = 'rgba(14, 165, 233, 0.6)';
       }
     } else {
       e.target.style.boxShadow = '';
+      e.target.style.borderColor = '';
     }
   };
 
@@ -32,7 +35,7 @@ const Header = ({ searchQuery, onSearchChange }) => {
         <div className="relative">
           <input 
             type="text" 
-            placeholder="Search files semantically..." 
+            placeholder="Search files semantically... (e.g., 'machine learning algorithms', 'authentication code')" 
             value={searchQuery}
             onChange={handleSearchInput}
             className="w-[600px] h-12 px-6 pr-12 rounded-full glass neon-border text-gray-800 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-neon-500/50 dark:focus:ring-cyber-500/50 transition-all duration-300 animate-neon-pulse"

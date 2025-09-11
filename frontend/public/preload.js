@@ -52,11 +52,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
 });
 
 // Expose a simple API for React to use
-contextBridge.exposeInMainWorld('api', {
-  // Backend communication methods will go here
+contextBridge.exposeInMainWorld('electron', {
+  // Directory selection
+  selectDirectory: () => ipcRenderer.invoke('select-folder'),
+  selectFiles: () => ipcRenderer.invoke('select-files'),
+  
+  // File operations
+  openFile: (filePath) => ipcRenderer.invoke('open-file', filePath),
+  
+  // Platform info
+  platform: process.platform,
+  
+  // App version
+  getVersion: () => ipcRenderer.invoke('get-version'),
+  
+  // Backend communication methods
   search: (query) => {
-    // This will communicate with your Node.js backend
-    return fetch('http://localhost:3001/search', {
+    return fetch('http://localhost:3000/api/search', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -66,12 +78,37 @@ contextBridge.exposeInMainWorld('api', {
   },
   
   addFolder: (folderPath) => {
-    return fetch('http://localhost:3001/add-folder', {
+    return fetch('http://localhost:3000/api/set-directory', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ folderPath })
+      body: JSON.stringify({ path: folderPath })
+    }).then(res => res.json());
+  }
+});
+
+// Keep the old API for compatibility
+contextBridge.exposeInMainWorld('api', {
+  // Backend communication methods will go here
+  search: (query) => {
+    // This will communicate with your Node.js backend
+    return fetch('http://localhost:3000/api/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query })
+    }).then(res => res.json());
+  },
+  
+  addFolder: (folderPath) => {
+    return fetch('http://localhost:3000/api/set-directory', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ path: folderPath })
     }).then(res => res.json());
   }
 });

@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import ResultsList from './components/ResultsList_New';
 import PreviewPane from './components/PreviewPane_New';
 import { useTheme } from './hooks/useTheme';
 import { useUIState } from './hooks/useUIState';
+import { useSearch } from './hooks/useSearch';
 import './index.css';
 import './styles/glassmorphism.css';
 
@@ -20,10 +21,33 @@ function App() {
     toggleSection,
     setSearchQuery
   } = useUIState();
+  
+  const { results, isSearching, search, clearResults } = useSearch();
+
+  // Debounced search effect
+  useEffect(() => {
+    if (!searchQuery || searchQuery.trim().length === 0) {
+      // Clear results when search is empty
+      clearResults();
+      return;
+    }
+    
+    if (searchQuery.trim().length < 2) {
+      // Don't search for very short queries
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      search(searchQuery.trim());
+    }, 300); // Reduced debounce time for better responsiveness
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, search, clearResults]);
 
   const handleResultSelect = (result) => {
     console.log('Selected result:', result);
-    // Here you would handle result selection logic
+    // Switch to preview tab when a result is selected
+    switchTab('preview');
   };
 
   return (
@@ -46,7 +70,9 @@ function App() {
 
         {/* Central Results Panel */}
         <ResultsList 
+          results={results}
           query={searchQuery}
+          isSearching={isSearching}
           onResultSelect={handleResultSelect}
         />
 
