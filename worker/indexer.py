@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import List, Optional, Iterable
 import logging
 import uuid
+import time
+import asyncio
 from config import get_settings
 from qdrant_client_util import ensure_collection, upsert_embeddings, search
 from parsers import parse_txt, parse_pdf, parse_docx, parse_image_ocr
@@ -306,7 +308,7 @@ def parse_file_to_text(path: Path) -> str:
 
 def index_files(paths: List[str]) -> dict:
     """
-    Index multiple files by parsing, chunking, embedding, and storing in Qdrant.
+    Index multiple files using batch processing for better performance and monitoring.
     
     Args:
         paths: List of file paths to index
@@ -315,97 +317,151 @@ def index_files(paths: List[str]) -> dict:
         dict: Summary with files_indexed, chunks_indexed, and points counts
     """
     settings = get_settings()
-    all_chunks, payloads, ids = [], [], []
-    file_count, chunk_count = 0, 0
     
-    logger.info(f"Starting to index {len(paths)} files...")
+    # Batch processing configuration
+    BATCH_SIZE = settings.BATCH_SIZE  # Files per batch
+    BATCH_DELAY_MS = settings.BATCH_DELAY_MS  # Delay between batches in milliseconds
     
-    for path_str in paths:
-        try:
-            path = Path(path_str)
-            
-            # Skip non-existent or non-file paths
-            if not path.exists() or not path.is_file():
-                logger.warning(f"Skipping non-existent or non-file path: {path}")
-                continue
-            
-            # Parse file to text
-            text = parse_file_to_text(path)
-            if not text.strip():
-                logger.info(f"Skipping file with no extractable text: {path}")
-                continue
-            
-            # Generate file hash for deduplication/tracking
-            file_hash = sha256_file(str(path))
-            
-            # Chunk the text
-            chunks = chunk_text(text, settings.CHUNK_SIZE, settings.CHUNK_OVERLAP)
-            if not chunks:
-                logger.warning(f"No chunks generated from file: {path}")
-                continue
-            
-            logger.info(f"Processing {path.name}: {len(text)} chars -> {len(chunks)} chunks")
-            
-            # Generate chunk IDs for consistent caching
-            chunk_ids = [f"chunk_{i}" for i in range(len(chunks))]
-            
-            # Generate embeddings for all chunks with caching
-            vectors = embed_texts(chunks, file_path=str(path.resolve()), chunk_ids=chunk_ids)
-            
-            # Prepare metadata for each chunk
-            base_meta = {
-                "file_path": str(path.resolve()),
-                "file_name": path.name,
-                "file_hash": file_hash,
-                "file_size": path.stat().st_size,
-                "file_type": path.suffix.lower(),
-            }
-            
-            # Generate unique IDs and payloads for each chunk
-            these_ids = [str(uuid.uuid4()) for _ in chunks]
-            these_payloads = [
-                {
-                    **base_meta, 
-                    "chunk": chunk, 
-                    "chunk_index": i,
-                    "chunk_size": len(chunk)
-                } 
-                for i, chunk in enumerate(chunks)
-            ]
-            
-            # Store in Qdrant
+    total_files = len(paths)
+    total_file_count = 0
+    total_chunk_count = 0
+    total_start_time = time.time()
+    
+    print(f"\n🚀 BATCH INDEXING STARTED")
+    print(f"📊 Total files to process: {total_files}")
+    print(f"⚙️  Batch size: {BATCH_SIZE} files")
+    print(f"⏱️  Batch delay: {BATCH_DELAY_MS}ms")
+    print(f"{'='*60}")
+    
+    logger.info(f"Starting batch indexing of {total_files} files (batch_size={BATCH_SIZE}, delay={BATCH_DELAY_MS}ms)")
+    
+    # Split files into batches
+    batches = [paths[i:i + BATCH_SIZE] for i in range(0, len(paths), BATCH_SIZE)]
+    
+    for batch_num, batch_paths in enumerate(batches, 1):
+        batch_start_time = time.time()
+        batch_file_count = 0
+        batch_chunk_count = 0
+        
+        print(f"\n📦 BATCH {batch_num}/{len(batches)}")
+        print(f"📁 Processing files {(batch_num-1)*BATCH_SIZE + 1}-{min(batch_num*BATCH_SIZE, total_files)} of {total_files}")
+        print(f"⏰ Started at: {time.strftime('%H:%M:%S')}")
+        
+        for file_num, path_str in enumerate(batch_paths, 1):
             try:
-                success = upsert_embeddings(these_ids, vectors, these_payloads)
-                if success:
-                    logger.info(f"Successfully indexed {path.name} with {len(chunks)} chunks")
-                    file_count += 1
-                    chunk_count += len(chunks)
-                    ids.extend(these_ids)
-                    all_chunks.extend(chunks)
-                    payloads.extend(these_payloads)
-                else:
-                    logger.error(f"Failed to store embeddings for {path.name}")
+                path = Path(path_str)
+                
+                # Skip non-existent or non-file paths
+                if not path.exists() or not path.is_file():
+                    print(f"  ⚠️  Skipping non-existent file: {path.name}")
+                    continue
+                
+                # Parse file to text
+                text = parse_file_to_text(path)
+                if not text.strip():
+                    print(f"  ⚠️  Skipping file with no text: {path.name}")
+                    continue
+                
+                # Generate file hash for deduplication/tracking
+                file_hash = sha256_file(str(path))
+                
+                # Chunk the text
+                chunks = chunk_text(text, settings.CHUNK_SIZE, settings.CHUNK_OVERLAP)
+                if not chunks:
+                    print(f"  ⚠️  No chunks generated: {path.name}")
+                    continue
+                
+                print(f"  📄 [{file_num:3d}/{len(batch_paths)}] {path.name[:40]:<40} -> {len(chunks):3d} chunks")
+                
+                # Generate chunk IDs for consistent caching
+                chunk_ids = [f"chunk_{i}" for i in range(len(chunks))]
+                
+                # Generate embeddings for all chunks with caching
+                vectors = embed_texts(chunks, file_path=str(path.resolve()), chunk_ids=chunk_ids)
+                
+                # Prepare metadata for each chunk
+                base_meta = {
+                    "file_path": str(path.resolve()),
+                    "file_name": path.name,
+                    "file_hash": file_hash,
+                    "file_size": path.stat().st_size,
+                    "file_type": path.suffix.lower(),
+                }
+                
+                # Generate unique IDs and payloads for each chunk
+                these_ids = [str(uuid.uuid4()) for _ in chunks]
+                these_payloads = [
+                    {
+                        **base_meta, 
+                        "chunk": chunk, 
+                        "chunk_index": i,
+                        "chunk_size": len(chunk)
+                    } 
+                    for i, chunk in enumerate(chunks)
+                ]
+                
+                # Store in Qdrant
+                try:
+                    success = upsert_embeddings(these_ids, vectors, these_payloads)
+                    if success:
+                        batch_file_count += 1
+                        batch_chunk_count += len(chunks)
+                        print(f"    ✅ Indexed successfully")
+                    else:
+                        print(f"    ❌ Failed to store embeddings")
+                        
+                except Exception as e:
+                    print(f"    ❌ Storage error: {str(e)[:50]}...")
+                    continue
                     
             except Exception as e:
-                logger.error(f"Error storing embeddings for {path.name}: {e}")
+                print(f"  ❌ Processing error: {path_str} - {str(e)[:50]}...")
                 continue
-                
-        except Exception as e:
-            logger.error(f"Error processing file {path_str}: {e}")
-            continue
+        
+        batch_duration = time.time() - batch_start_time
+        total_file_count += batch_file_count
+        total_chunk_count += batch_chunk_count
+        
+        print(f"")
+        print(f"📈 BATCH {batch_num} COMPLETED")
+        print(f"  ✅ Files indexed: {batch_file_count}/{len(batch_paths)}")
+        print(f"  📊 Chunks created: {batch_chunk_count}")
+        print(f"  ⏱️  Duration: {batch_duration:.2f}s")
+        print(f"  🔥 Speed: {batch_file_count/batch_duration:.1f} files/sec")
+        
+        # Add delay between batches (except for the last batch)
+        if batch_num < len(batches):
+            print(f"  ⏸️  Pausing {BATCH_DELAY_MS}ms before next batch...")
+            time.sleep(BATCH_DELAY_MS / 1000.0)
+    
+    total_duration = time.time() - total_start_time
+    
+    print(f"\n🎉 BATCH INDEXING COMPLETED")
+    print(f"{'='*60}")
+    print(f"📊 FINAL STATISTICS:")
+    print(f"  📁 Total files processed: {total_file_count}/{total_files}")
+    print(f"  📝 Total chunks created: {total_chunk_count}")
+    print(f"  ⏱️  Total duration: {total_duration:.2f}s")
+    print(f"  🔥 Average speed: {total_file_count/total_duration:.1f} files/sec")
+    print(f"  📦 Batches processed: {len(batches)}")
+    print(f"  ⚙️  Batch efficiency: {(total_file_count/total_files)*100:.1f}%")
+    print(f"{'='*60}\n")
     
     summary = {
-        "files_indexed": file_count,
-        "chunks_indexed": chunk_count,
-        "points": len(ids)
+        "files_indexed": total_file_count,
+        "chunks_indexed": total_chunk_count,
+        "points": total_chunk_count,
+        "batches_processed": len(batches),
+        "total_duration": total_duration,
+        "average_speed": total_file_count/total_duration if total_duration > 0 else 0
     }
     
     # Invalidate search cache since new content was indexed
-    if file_count > 0:
+    if total_file_count > 0:
         invalidate_search_cache()
         logger.info("Search cache invalidated due to new indexed content")
     
-    logger.info(f"Indexing completed: {summary}")
+    logger.info(f"Batch indexing completed: {summary}")
     return summary
 
 def semantic_search(query: str, top_k: int | None = None) -> dict:
