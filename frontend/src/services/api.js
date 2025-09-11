@@ -146,14 +146,19 @@ export const apiService = {
 
     /**
      * Ask AI a question about the indexed content
-     * @param {string} question - Question to ask
+     * @param {string} query - Question to ask
      * @param {number} topK - Number of context results to use (default: 5)
+     * @param {string} fileId - Optional file ID to ask about specific file
      * @returns {Promise<Object>} AI response
      */
-    async ask(question, topK = 5) {
+    async ask(query, topK = 5, fileId = null) {
+      const body = { query, topK };
+      if (fileId) {
+        body.fileId = fileId;
+      }
       return apiRequest('/ask', {
         method: 'POST',
-        body: JSON.stringify({ question, top_k: topK }),
+        body: JSON.stringify(body),
       });
     },
   },

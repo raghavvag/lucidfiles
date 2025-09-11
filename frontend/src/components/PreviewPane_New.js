@@ -3,7 +3,7 @@ import { Brain } from 'lucide-react';
 import { useSearch } from '../hooks/useSearch';
 import FileViewer from './FileViewer';
 
-const PreviewPane = ({ activeTab, onTabSwitch, selectedFile }) => {
+const PreviewPane = ({ activeTab, onTabSwitch, selectedFile, aiSummary, aiSummaryFile }) => {
   const [aiQuestion, setAiQuestion] = useState('');
   const [aiResponse, setAiResponse] = useState('');
   const [isAskingAI, setIsAskingAI] = useState(false);
@@ -14,9 +14,12 @@ const PreviewPane = ({ activeTab, onTabSwitch, selectedFile }) => {
     
     setIsAskingAI(true);
     try {
-      const result = await askAI(aiQuestion);
+      // Pass the selected file path for file-specific questions
+      const fileId = selectedFile ? selectedFile.path : null;
+      const result = await askAI(aiQuestion, 5, fileId);
+      
       if (result.success) {
-        setAiResponse(result.answer);
+        setAiResponse(result.answer || result.summary);
       } else {
         setAiResponse(`Error: ${result.error}`);
       }
@@ -67,12 +70,21 @@ const PreviewPane = ({ activeTab, onTabSwitch, selectedFile }) => {
               <h3 className="font-semibold text-gray-800 dark:text-white mb-3 flex items-center">
                 <Brain className="w-4 h-4 mr-2 text-neon-500 dark:text-cyber-400 animate-pulse" />
                 AI Summary
+                {aiSummaryFile && (
+                  <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                    ({aiSummaryFile})
+                  </span>
+                )}
               </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-                This neural network implementation features a modular architecture with configurable layers, 
-                batch normalization, and dropout regularization. The code demonstrates best practices for 
-                gradient descent optimization and includes comprehensive error handling.
-              </p>
+              {aiSummary ? (
+                <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+                  {aiSummary}
+                </p>
+              ) : (
+                <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+                  Click "Summarize" on any file to see AI-generated insights here.
+                </p>
+              )}
             </div>
 
             <div className="glass rounded-lg p-4">

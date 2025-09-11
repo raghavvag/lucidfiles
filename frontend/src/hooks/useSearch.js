@@ -96,16 +96,18 @@ export const useSearch = () => {
   }, []);
 
   // Ask AI a question
-  const askAI = useCallback(async (question, topK = 5) => {
+  const askAI = useCallback(async (question, topK = 5, fileId = null) => {
     if (!question || question.trim().length === 0) {
       return { success: false, error: 'Question cannot be empty' };
     }
 
     try {
       setError(null);
-      const response = await apiService.search.ask(question, topK);
+      const response = await apiService.search.ask(question, topK, fileId);
       
-      if (response.ok && response.answer) {
+      if (response.summary) {
+        return { success: true, answer: response.summary, summary: response.summary };
+      } else if (response.answer) {
         return { success: true, answer: response.answer };
       } else {
         const errorMsg = response.error || 'AI question failed';

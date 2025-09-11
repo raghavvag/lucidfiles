@@ -24,6 +24,8 @@ function App() {
   
   const { results, isSearching, search, clearResults } = useSearch();
   const [selectedFile, setSelectedFile] = useState(null);
+  const [aiSummary, setAiSummary] = useState('');
+  const [aiSummaryFile, setAiSummaryFile] = useState('');
 
   // Debounced search effect
   useEffect(() => {
@@ -52,6 +54,12 @@ function App() {
     switchTab('preview');
   };
 
+  const handleSummaryGenerated = (filePath, fileName, summary) => {
+    setAiSummary(summary);
+    setAiSummaryFile(fileName);
+    switchTab('insight'); // Switch to AI Insights tab
+  };
+
   return (
     <div className={`h-screen overflow-hidden font-inter transition-all duration-500 ${isDarkMode ? 'dark cyber-grid' : ''}`}>
       {/* Global Header Bar */}
@@ -76,6 +84,7 @@ function App() {
           query={searchQuery}
           isSearching={isSearching}
           onResultSelect={handleResultSelect}
+          onSummaryGenerated={handleSummaryGenerated}
         />
 
         {/* Right Preview Pane */}
@@ -83,6 +92,8 @@ function App() {
           activeTab={activeTab}
           onTabSwitch={switchTab}
           selectedFile={selectedFile}
+          aiSummary={aiSummary}
+          aiSummaryFile={aiSummaryFile}
         />
       </div>
     </div>

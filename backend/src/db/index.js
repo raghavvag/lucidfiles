@@ -2,6 +2,36 @@ const Database = require('better-sqlite3');
 const { DB_PATH } = require('../config');
 const db = new Database(DB_PATH);
 
+// Initialize database tables
+function initializeDatabase() {
+  // Create directories table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS directories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      path TEXT UNIQUE NOT NULL,
+      added_at TEXT NOT NULL
+    )
+  `);
+
+  // Create files table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS files (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      path TEXT UNIQUE NOT NULL,
+      dir_id INTEGER,
+      checksum TEXT,
+      last_indexed TEXT,
+      status TEXT DEFAULT 'pending',
+      FOREIGN KEY (dir_id) REFERENCES directories (id)
+    )
+  `);
+
+  console.log('Database tables initialized successfully');
+}
+
+// Initialize database on module load
+initializeDatabase();
+
 module.exports = {
   addDirectory(path) {
     const stmt = db.prepare("INSERT OR IGNORE INTO directories (path, added_at) VALUES (?, datetime('now'))");
