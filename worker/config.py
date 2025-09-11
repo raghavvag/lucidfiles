@@ -17,9 +17,9 @@ class Settings(BaseSettings):
         description="HuggingFace model name for embeddings"
     )
     
-    # Text chunking configuration
-    CHUNK_SIZE: int = Field(default=800, description="Maximum size of text chunks", ge=100, le=2000)
-    CHUNK_OVERLAP: int = Field(default=120, description="Overlap between consecutive chunks", ge=0, le=500)
+    # Text chunking configuration (character-based semantic chunking)
+    CHUNK_SIZE: int = Field(default=1200, description="Maximum size of text chunks in characters", ge=500, le=3000)
+    CHUNK_OVERLAP: int = Field(default=200, description="Overlap between consecutive chunks in characters", ge=50, le=500)
     
     # Search configuration
     MAX_TOP_K: int = Field(default=8, description="Maximum number of search results to return", ge=1, le=100)
@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     # Search result cache configuration
     SEARCH_CACHE_SIZE_MB: int = Field(default=128, description="Maximum search cache size in MB", ge=32, le=1024)
     SEARCH_CACHE_TTL_SECONDS: int = Field(default=1800, description="Search cache TTL in seconds", ge=300, le=7200)
+    
+    # Batch processing configuration
+    BATCH_SIZE: int = Field(default=500, description="Number of files to process per batch", ge=50, le=2000)
+    BATCH_DELAY_MS: int = Field(default=500, description="Delay between batches in milliseconds", ge=100, le=5000)
     
     # File processing configuration
     SUPPORTED_FILE_TYPES: List[str] = Field(
