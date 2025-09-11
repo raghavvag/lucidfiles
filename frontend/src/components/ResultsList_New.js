@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { FileCode, FileText, Database, Filter, Eye, Download, Share, Trash, Loader, Search, RefreshCw, Plus, Sparkles, Brain } from 'lucide-react';
 import { useFileOperations } from '../hooks/useFileOperations';
+import { useSearch } from '../hooks/useSearch';
 
-const ResultsList = ({ results = [], query, isSearching, onResultSelect }) => {
+const ResultsList = ({ results = [], query, isSearching, onResultSelect, onSummaryGenerated }) => {
   const [hoveredCard, setHoveredCard] = useState(null);
+  const [isSummarizing, setIsSummarizing] = useState({});
   const { indexFile, reindexFile, removeFile, isProcessing } = useFileOperations();
+  const { askAI } = useSearch();
 
   const getFileIcon = (type) => {
     switch (type) {
@@ -77,6 +80,26 @@ const ResultsList = ({ results = [], query, isSearching, onResultSelect }) => {
       console.log(`File ${actionName} successfully`);
     } else {
       console.error(`Failed to ${operation} file:`, result?.error);
+    }
+  };
+
+  const handleSummarize = async (filePath, fileName) => {
+    const fileKey = filePath;
+    setIsSummarizing(prev => ({ ...prev, [fileKey]: true }));
+    
+    try {
+      const result = await askAI('Summarize this document', 5, filePath);
+      
+      if (result.success) {
+        // Call the parent callback to set summary in AI Insights
+        onSummaryGenerated && onSummaryGenerated(filePath, fileName, result.answer || result.summary);
+      } else {
+        console.error('Summary failed:', result.error);
+      }
+    } catch (error) {
+      console.error('Summary error:', error);
+    } finally {
+      setIsSummarizing(prev => ({ ...prev, [fileKey]: false }));
     }
   };
 
@@ -215,6 +238,7 @@ const ResultsList = ({ results = [], query, isSearching, onResultSelect }) => {
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                     {result.filePath}
                   </p>
+                  
                   <div className="flex items-center space-x-2">
                     <button 
                       className="px-3 py-1 rounded-lg bg-neon-500/20 text-neon-700 dark:text-neon-400 text-xs font-medium hover:bg-neon-500/30 transition-all duration-300 hover:animate-pulse"
@@ -224,10 +248,10 @@ const ResultsList = ({ results = [], query, isSearching, onResultSelect }) => {
                     </button>
                     <button 
                       className="px-3 py-1 rounded-lg bg-cyber-500/20 text-cyber-700 dark:text-cyber-400 text-xs font-medium hover:bg-cyber-500/30 transition-all duration-300 hover:animate-pulse"
-                      onClick={() => handleFileOperation('reindex', result.filePath, result.filename)}
-                      disabled={isProcessing}
+                      onClick={() => handleSummarize(result.filePath, result.filename)}
+                      disabled={isSummarizing[result.filePath]}
                     >
-                      {isProcessing ? 'Processing...' : 'Summarize'}
+                      {isSummarizing[result.filePath] ? 'Summarizing...' : 'Summarize'}
                     </button>
                     <button className="px-3 py-1 rounded-lg bg-electric-500/20 text-electric-700 dark:text-electric-400 text-xs font-medium hover:bg-electric-500/30 transition-all duration-300 hover:animate-pulse">
                       Pin
@@ -250,11 +274,11 @@ const ResultsList = ({ results = [], query, isSearching, onResultSelect }) => {
                   </button>
                   <button 
                     className="w-8 h-8 rounded-full bg-cyber-500/20 flex items-center justify-center hover:bg-cyber-500/40 transition-all duration-300 hover:animate-pulse"
-                    onClick={() => handleFileOperation('reindex', result.filePath, result.filename)}
-                    disabled={isProcessing}
+                    onClick={() => handleSummarize(result.filePath, result.filename)}
+                    disabled={isSummarizing[result.filePath]}
                     title="Summarize file"
                   >
-                    <RefreshCw className="w-4 h-4 text-cyber-600 dark:text-cyber-400" />
+                    <Brain className="w-4 h-4 text-cyber-600 dark:text-cyber-400" />
                   </button>
                   <button className="w-8 h-8 rounded-full bg-electric-500/20 flex items-center justify-center hover:bg-electric-500/40 transition-all duration-300 hover:animate-pulse">
                     <Share className="w-4 h-4 text-electric-600 dark:text-electric-400" />

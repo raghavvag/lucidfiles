@@ -247,14 +247,33 @@ def reindex_file_api(req: ReindexFileRequest):
         
                 # First, try to remove existing entries for this file
         try:
-            # Search for existing entries with this file path
-            existing_results = search_by_file_path(str(file_path.resolve()))
+            # Try multiple path formats to find existing entries
+            file_path_str = str(file_path.resolve())
+            file_path_original = str(file_path)
+            
+            existing_results = []
+            
+            # Search with resolved path first
+            existing_results = search_by_file_path(file_path_str)
+            
+            # If no results, try with original path
+            if not existing_results and file_path_original != file_path_str:
+                existing_results = search_by_file_path(file_path_original)
+            
+            # If still no results, try with normalized path separators
+            if not existing_results:
+                normalized_path = file_path_str.replace('\\', '/')
+                existing_results = search_by_file_path(normalized_path)
             
             if existing_results:
                 existing_ids = [r["id"] for r in existing_results]
                 if existing_ids:
                     delete_points(existing_ids)
                     logger.info(f"Removed {len(existing_ids)} existing chunks for file: {file_path.name}")
+                else:
+                    logger.warning(f"Found existing entries but no IDs for file: {file_path.name}")
+            else:
+                logger.info(f"No existing entries found for file: {file_path.name}")
             
         except Exception as delete_error:
             logger.warning(f"Could not remove existing entries for {file_path.name}: {delete_error}")
@@ -336,6 +355,62 @@ def get_file_content_api(req: FileContentRequest):
     except Exception as e:
         logger.error(f"File content retrieval failed: {e}")
         raise HTTPException(status_code=500, detail=f"File content retrieval failed: {str(e)}")
+
+@app.get("/debug/indexed-files")
+def debug_indexed_files():
+    """
+    Debug endpoint to list all indexed files and their chunks count.
+    """
+    try:
+        from qdrant_client_util import get_collection_info
+        
+        # Get collection info
+        collection_info = get_collection_info()
+        if not collection_info:
+            return {"error": "Collection not found"}
+        
+        # Get all points with file information
+        from qdrant_client import QdrantClient
+        from config import get_settings
+        
+        settings = get_settings()
+        client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
+        
+        # Scroll through all points
+        points, _ = client.scroll(
+            collection_name=settings.QDRANT_COLLECTION,
+            limit=10000,
+            with_payload=True,
+            with_vectors=False
+        )
+        
+        # Group by file path
+        files_info = {}
+        for point in points:
+            payload = point.payload or {}
+            file_path = payload.get("file_path", "unknown")
+            
+            if file_path not in files_info:
+                files_info[file_path] = {
+                    "file_path": file_path,
+                    "file_name": payload.get("file_name", "unknown"),
+                    "chunks": 0,
+                    "total_size": 0,
+                    "file_type": payload.get("file_type", "unknown")
+                }
+            
+            files_info[file_path]["chunks"] += 1
+            files_info[file_path]["total_size"] += payload.get("chunk_size", 0)
+        
+        return {
+            "total_files": len(files_info),
+            "total_points": len(points),
+            "files": list(files_info.values())
+        }
+        
+    except Exception as e:
+        logger.error(f"Debug endpoint error: {e}")
+        return {"error": str(e)}
 
 @app.delete("/remove-file")
 def remove_file_api(req: RemoveFileRequest):

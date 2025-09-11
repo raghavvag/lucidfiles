@@ -21,12 +21,17 @@ router.post('/search', async (req, res) => {
 
 router.post('/ask', async (req, res) => {
   const { query, topK = 3, fileId } = req.body;
+  console.log('Ask endpoint called with:', { query, topK, fileId });
+  console.log('OpenAI client status:', !!openai);
+  console.log('OPENAI_API_KEY exists:', !!OPENAI_API_KEY);
   
   if (!query) {
+    console.log('Missing query parameter');
     return res.status(400).json({ error: 'Query is required' });
   }
 
   if (!openai) {
+    console.log('OpenAI client not initialized');
     return res.status(500).json({ error: 'OpenAI API key not configured' });
   }
 
@@ -153,7 +158,12 @@ router.post('/ask', async (req, res) => {
     }
     
   } catch (err) {
-    console.error('Ask endpoint error:', err.message);
+    console.error('Ask endpoint error - Full error details:', {
+      message: err.message,
+      stack: err.stack,
+      code: err.code,
+      response: err.response?.data
+    });
     res.status(500).json({ error: err.message });
   }
 });

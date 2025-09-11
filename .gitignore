@@ -5,6 +5,15 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Native binary files
+*.node
+*.o
+*.obj
+*.lib
+*.a
+*.so
+*.dylib
+
 # Electron specific
 frontend/node_modules/electron/dist/
 *.exe
