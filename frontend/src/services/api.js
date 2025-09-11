@@ -3,7 +3,7 @@
  * Handles all HTTP requests to the Node.js backend which communicates with the Python worker
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
 class APIError extends Error {
   constructor(message, status, data) {
