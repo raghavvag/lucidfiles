@@ -47,6 +47,9 @@ class ReindexFileRequest(BaseModel):
 class RemoveFileRequest(BaseModel):
     path: str
 
+class FileContentRequest(BaseModel):
+    path: str
+
 class SearchRequest(BaseModel):
     query: str
     top_k: Optional[int] = None
@@ -275,6 +278,64 @@ def reindex_file_api(req: ReindexFileRequest):
     except Exception as e:
         logger.error(f"File re-indexing failed: {e}")
         raise HTTPException(status_code=500, detail=f"File re-indexing failed: {str(e)}")
+
+@app.post("/file-content")
+def get_file_content_api(req: FileContentRequest):
+    """
+    Get all indexed content for a specific file by aggregating its chunks.
+    
+    Args:
+        req: FileContentRequest containing file path
+        
+    Returns:
+        Dictionary with aggregated file content and metadata
+    """
+    try:
+        file_path = Path(req.path)
+        # Use the original path as provided instead of resolving it
+        file_path_str = req.path
+        
+        # Search for all chunks from this file
+        try:
+            results = search_by_file_path(file_path_str)
+            
+            if not results:
+                raise HTTPException(status_code=404, detail=f"No indexed content found for file: {req.path}")
+            
+            # Sort chunks by index if available, otherwise by score
+            sorted_results = sorted(results, key=lambda x: x.get("payload", {}).get("chunk_index", 0))
+            
+            # Aggregate all text content
+            content_chunks = []
+            for result in sorted_results:
+                payload = result.get("payload", {})
+                # The actual text content is stored in the 'chunk' field
+                text = payload.get("chunk", payload.get("text", payload.get("content", "")))
+                if text:
+                    content_chunks.append(text)
+            
+            full_content = "\n\n".join(content_chunks)
+            
+            return {
+                "success": True,
+                "filePath": file_path_str,
+                "fileName": file_path.name,
+                "content": full_content,
+                "totalChunks": len(results),
+                "contentLength": len(full_content)
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as search_error:
+            logger.error(f"Error retrieving file content: {search_error}")
+            raise HTTPException(status_code=500, detail=f"Failed to retrieve file content: {str(search_error)}")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"File content retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail=f"File content retrieval failed: {str(e)}")
 
 @app.delete("/remove-file")
 def remove_file_api(req: RemoveFileRequest):
