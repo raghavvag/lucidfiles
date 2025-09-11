@@ -54,6 +54,7 @@ frontend/public/build/
 # Backend specific  
 backend/uploads/
 backend/logs/
+backend/.env
 
 # IDE files
 .vscode/
