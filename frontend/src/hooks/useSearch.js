@@ -71,10 +71,27 @@ export const useSearch = () => {
             chunkIndex: result.chunk_index || 0,
             fileSize: result.file_size || 0,
             chunkSize: result.chunk_size || 0,
+            score: result.score || 0, // Keep original score for deduplication
           };
         });
 
-        setResults(formattedResults);
+        // Deduplicate by file path - keep the chunk with highest score for each file
+        const fileMap = new Map();
+
+        formattedResults.forEach(result => {
+          const key = result.filePath;
+          if (!fileMap.has(key) || result.score > fileMap.get(key).score) {
+            fileMap.set(key, result);
+          }
+        });
+
+        // Convert map values to array and re-assign sequential IDs
+        const finalResults = Array.from(fileMap.values()).map((result, index) => ({
+          ...result,
+          id: `search-${index}`
+        }));
+
+        setResults(finalResults);
       } else {
         setResults([]);
         setError(response.error || 'Search failed');

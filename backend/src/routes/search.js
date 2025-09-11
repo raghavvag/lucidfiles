@@ -12,26 +12,31 @@ const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 router.post('/search', async (req, res) => {
   const { query, top_k = 5 } = req.body;
   try {
+    console.log('🔍 Search request:', query, `(top_k: ${top_k})`);
+    const startTime = Date.now();
     const { data } = await worker.search(query, top_k);
+    const duration = Date.now() - startTime;
+    console.log(`✅ 🔍 Search completed in ${duration}ms - Found ${data.length} results`);
     res.json({ ok: true, results: data });
   } catch (err) {
+    console.error('❌ 🔍 Search failed:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 router.post('/ask', async (req, res) => {
   const { query, topK = 3, fileId } = req.body;
-  console.log('Ask endpoint called with:', { query, topK, fileId });
-  console.log('OpenAI client status:', !!openai);
-  console.log('OPENAI_API_KEY exists:', !!OPENAI_API_KEY);
+  console.log('🤖 Ask endpoint called with:', { query, topK, fileId });
+  console.log('🔑 OpenAI client status:', !!openai);
+  console.log('🔑 OPENAI_API_KEY exists:', !!OPENAI_API_KEY);
   
   if (!query) {
-    console.log('Missing query parameter');
+    console.log('❌ Missing query parameter');
     return res.status(400).json({ error: 'Query is required' });
   }
 
   if (!openai) {
-    console.log('OpenAI client not initialized');
+    console.log('❌ 🤖 OpenAI client not initialized');
     return res.status(500).json({ error: 'OpenAI API key not configured' });
   }
 
@@ -40,6 +45,7 @@ router.post('/ask', async (req, res) => {
     
     if (fileId) {
       // Get all chunks for the specific file from the new worker endpoint
+      console.log('📄 🔍 Fetching content for specific file:', fileId);
       try {
         const { data } = await axios.post(`${WORKER_URL}/file-content`, {
           path: fileId
@@ -47,6 +53,7 @@ router.post('/ask', async (req, res) => {
         
         if (data.success && data.content) {
           contextText = data.content;
+          console.log('✅ 📄 File content retrieved successfully');
         } else {
           return res.status(404).json({ error: 'No content found for this file. File may not be indexed yet.' });
         }
@@ -100,14 +107,17 @@ router.post('/ask', async (req, res) => {
       }
     } else {
       // Search and summarize top results
+      console.log('🔍 📚 Performing semantic search for query:', query);
       try {
         const { data } = await worker.search(query, topK);
         const searchResults = data.results || data || [];
         
         if (searchResults.length === 0) {
+          console.log('📭 No results found for query');
           return res.json({ summary: 'No relevant documents found for your query.' });
         }
         
+        console.log(`✅ 🔍 Found ${searchResults.length} relevant documents`);
         // Combine text from search results
         const contexts = searchResults.map((result, index) => {
           const text = result.text || result.content || '';
@@ -117,7 +127,7 @@ router.post('/ask', async (req, res) => {
         
         contextText = contexts.join('\n\n---\n\n');
       } catch (workerErr) {
-        console.error('Error searching documents:', workerErr.message);
+        console.error('❌ 🔍 Error searching documents:', workerErr.message);
         return res.status(500).json({ error: 'Search service unavailable' });
       }
     }
@@ -127,6 +137,7 @@ router.post('/ask', async (req, res) => {
     }
 
     // Generate summary using OpenAI
+    console.log('🤖 Generating AI summary/response...');
     try {
       const response = await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
@@ -149,11 +160,12 @@ router.post('/ask', async (req, res) => {
       });
 
       const summary = response.choices[0]?.message?.content || 'Unable to generate summary.';
+      console.log('✅ 🤖 AI response generated successfully');
       
       res.json({ summary });
       
     } catch (openaiErr) {
-      console.error('OpenAI API error:', openaiErr.message);
+      console.error('❌ 🤖 OpenAI API error:', openaiErr.message);
       res.status(500).json({ error: 'Failed to generate summary' });
     }
     

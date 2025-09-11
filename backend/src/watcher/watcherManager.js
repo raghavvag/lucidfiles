@@ -9,30 +9,39 @@ function startWatcher(dirPath) {
   const watcher = chokidar.watch(dirPath, { persistent: true, ignoreInitial: true, depth: 99 });
   watcher
     .on('add', async path => {
-      console.log('File added:', path);
+      console.log('📄 ➕ New file detected:', path);
       try {
         const res = await worker.indexFile(path);
+        console.log('✅ 🔍 File indexed successfully:', path.split(/[\\/]/).pop());
         // optional: update DB using res info
         db.upsertFile({ path, dir_id: null, checksum: res.data.checksum || null, last_indexed: new Date().toISOString(), status: 'indexed' });
-      } catch (e) { console.error('index-file error', e.message); }
+      } catch (e) { 
+        console.error('❌ 🔍 File indexing failed:', e.message); 
+      }
     })
     .on('change', async path => {
-      console.log('File changed:', path);
+      console.log('📄 ✏️  File changed:', path);
       try {
         const res = await worker.reindexFile(path);
+        console.log('✅ 🔄 File reindexed successfully:', path.split(/[\\/]/).pop());
         db.upsertFile({ path, dir_id: null, checksum: res.data.checksum || null, last_indexed: new Date().toISOString(), status: 'indexed' });
-      } catch (e) { console.error('reindex-file error', e.message); }
+      } catch (e) { 
+        console.error('❌ 🔄 File reindexing failed:', e.message); 
+      }
     })
     .on('unlink', async path => {
-      console.log('File removed:', path);
+      console.log('📄 🗑️  File deleted:', path);
       try {
         await worker.removeFile(path);
+        console.log('✅ 🗑️  File removed from index:', path.split(/[\\/]/).pop());
         db.removeFile(path);
-      } catch (e) { console.error('remove-file error', e.message); }
+      } catch (e) { 
+        console.error('❌ 🗑️  File removal failed:', e.message); 
+      }
     });
 
   watchers.set(dirPath, watcher);
-  console.log('Started watcher for', dirPath);
+  console.log('🎯 👀 File watcher activated for:', dirPath);
 }
 
 function stopWatcher(dirPath) {

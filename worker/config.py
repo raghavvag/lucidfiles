@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     # Search configuration
     MAX_TOP_K: int = Field(default=8, description="Maximum number of search results to return", ge=1, le=100)
     
+    # Embedding cache configuration
+    EMBEDDING_CACHE_SIZE_MB: int = Field(default=512, description="Maximum embedding cache size in MB", ge=64, le=4096)
+    EMBEDDING_CACHE_TTL_SECONDS: int = Field(default=3600, description="Cache TTL in seconds (0 = no expiry)", ge=0)
+    
+    # Search result cache configuration
+    SEARCH_CACHE_SIZE_MB: int = Field(default=128, description="Maximum search cache size in MB", ge=32, le=1024)
+    SEARCH_CACHE_TTL_SECONDS: int = Field(default=1800, description="Search cache TTL in seconds", ge=300, le=7200)
+    
     # File processing configuration
     SUPPORTED_FILE_TYPES: List[str] = Field(
         default=["pdf", "docx", "txt", "md"], 

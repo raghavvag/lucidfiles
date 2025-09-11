@@ -2,7 +2,7 @@
 Text embedding and indexing utilities.
 
 This module provides functionality for loading and caching SentenceTransformer models,
-computing embeddings, ensuring proper Qdrant collection setup, and batch indexing files.
+computing embeddings with LRU caching, ensuring proper Qdrant collection setup, and batch indexing files.
 """
 
 from sentence_transformers import SentenceTransformer
@@ -16,6 +16,10 @@ from qdrant_client_util import ensure_collection, upsert_embeddings, search
 from parsers import parse_txt, parse_pdf, parse_docx, parse_image_ocr
 from chunker import chunk_text
 from utils import sha256_file
+from embedding_cache import (
+    get_embedding_cache, cached_embed_text, 
+    get_search_cache, cached_search, invalidate_search_cache
+)
 
 logger = logging.getLogger(__name__)
 
@@ -90,12 +94,16 @@ def get_vector_size() -> Optional[int]:
     
     return _vector_size
 
-def embed_texts(texts: List[str]) -> np.ndarray:
+def embed_texts(texts: List[str], file_path: Optional[str] = None, 
+               chunk_ids: Optional[List[str]] = None, use_cache: bool = True) -> np.ndarray:
     """
-    Convert texts to normalized embedding vectors.
+    Convert texts to normalized embedding vectors with optional caching.
     
     Args:
         texts: List of text strings to embed
+        file_path: Optional file path for cache key generation
+        chunk_ids: Optional list of chunk IDs for cache key generation  
+        use_cache: Whether to use embedding cache (default: True)
         
     Returns:
         np.ndarray: Normalized embedding vectors of shape (len(texts), vector_size)
@@ -111,42 +119,110 @@ def embed_texts(texts: List[str]) -> np.ndarray:
         texts = list(texts)
     
     try:
-        model = get_model()
+        embeddings = []
+        cache_misses = []
+        cache_miss_indices = []
         
-        logger.debug(f"Embedding {len(texts)} texts...")
+        if use_cache:
+            cache = get_embedding_cache()
+            
+            # Check cache for each text
+            for i, text in enumerate(texts):
+                chunk_id = chunk_ids[i] if chunk_ids and i < len(chunk_ids) else None
+                cached_embedding = cache.get(text, file_path, chunk_id)
+                
+                if cached_embedding is not None:
+                    embeddings.append(cached_embedding)
+                else:
+                    embeddings.append(None)  # Placeholder
+                    cache_misses.append(text)
+                    cache_miss_indices.append(i)
+            
+            logger.info(f"Cache hits: {len(texts) - len(cache_misses)}, misses: {len(cache_misses)}")
+        else:
+            # No caching - compute all embeddings
+            cache_misses = texts
+            cache_miss_indices = list(range(len(texts)))
+            embeddings = [None] * len(texts)
         
-        # Encode texts with normalization
-        embeddings = model.encode(
-            texts, 
-            convert_to_numpy=True, 
-            normalize_embeddings=True,
-            show_progress_bar=len(texts) > 100  # Show progress for large batches
-        )
+        # Compute embeddings for cache misses
+        if cache_misses:
+            model = get_model()
+            
+            logger.info(f"Computing embeddings for {len(cache_misses)} texts...")
+            
+            # Batch encode cache misses
+            miss_embeddings = model.encode(
+                cache_misses, 
+                convert_to_numpy=True, 
+                normalize_embeddings=True,
+                show_progress_bar=len(cache_misses) > 100
+            )
+            
+            # Ensure embeddings are normalized
+            norms = np.linalg.norm(miss_embeddings, axis=1, keepdims=True)
+            miss_embeddings = miss_embeddings / np.maximum(norms, 1e-8)
+            
+            # Fill in computed embeddings and cache them
+            for i, miss_idx in enumerate(cache_miss_indices):
+                embedding = miss_embeddings[i]
+                embeddings[miss_idx] = embedding
+                
+                if use_cache:
+                    # Cache the computed embedding
+                    text = texts[miss_idx]
+                    chunk_id = chunk_ids[miss_idx] if chunk_ids and miss_idx < len(chunk_ids) else None
+                    cache.set(text, embedding, file_path, chunk_id)
         
-        logger.debug(f"Generated embeddings with shape: {embeddings.shape}")
+        # Convert to numpy array
+        result = np.array(embeddings)
         
-        # Ensure embeddings are normalized (cosine similarity optimization)
-        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-        embeddings = embeddings / np.maximum(norms, 1e-8)  # Avoid division by zero
-        
-        return embeddings
+        logger.info(f"Generated embeddings with shape: {result.shape}")
+        return result
         
     except Exception as e:
         logger.error(f"Failed to embed texts: {e}")
         raise RuntimeError(f"Text embedding failed: {e}")
 
-def embed_single_text(text: str) -> np.ndarray:
+def embed_single_text(text: str, file_path: Optional[str] = None, 
+                     chunk_id: Optional[str] = None, use_cache: bool = True) -> np.ndarray:
     """
-    Convert single text to normalized embedding vector.
+    Convert single text to normalized embedding vector with optional caching.
     
     Args:
         text: Text string to embed
+        file_path: Optional file path for cache key
+        chunk_id: Optional chunk ID for cache key
+        use_cache: Whether to use embedding cache (default: True)
         
     Returns:
         np.ndarray: Normalized embedding vector of shape (vector_size,)
     """
-    embeddings = embed_texts([text])
-    return embeddings[0]
+    if use_cache:
+        # Use direct model access to avoid circular dependency
+        cache = get_embedding_cache()
+        
+        # Try to get from cache first
+        cached_embedding = cache.get(text, file_path, chunk_id)
+        if cached_embedding is not None:
+            return cached_embedding
+        
+        # Not in cache, compute and store
+        model = get_model()
+        embedding = model.encode([text], convert_to_numpy=True, normalize_embeddings=True)[0]
+        
+        # Ensure normalization
+        norm = np.linalg.norm(embedding)
+        if norm > 0:
+            embedding = embedding / norm
+            
+        # Store in cache
+        cache.set(text, embedding, file_path, chunk_id)
+        
+        return embedding
+    else:
+        embeddings = embed_texts([text], file_path, [chunk_id] if chunk_id else None, use_cache=False)
+        return embeddings[0]
 
 def is_model_loaded() -> bool:
     """
@@ -270,8 +346,11 @@ def index_files(paths: List[str]) -> dict:
             
             logger.info(f"Processing {path.name}: {len(text)} chars -> {len(chunks)} chunks")
             
-            # Generate embeddings for all chunks
-            vectors = embed_texts(chunks)
+            # Generate chunk IDs for consistent caching
+            chunk_ids = [f"chunk_{i}" for i in range(len(chunks))]
+            
+            # Generate embeddings for all chunks with caching
+            vectors = embed_texts(chunks, file_path=str(path.resolve()), chunk_ids=chunk_ids)
             
             # Prepare metadata for each chunk
             base_meta = {
@@ -321,12 +400,17 @@ def index_files(paths: List[str]) -> dict:
         "points": len(ids)
     }
     
+    # Invalidate search cache since new content was indexed
+    if file_count > 0:
+        invalidate_search_cache()
+        logger.info("Search cache invalidated due to new indexed content")
+    
     logger.info(f"Indexing completed: {summary}")
     return summary
 
 def semantic_search(query: str, top_k: int | None = None) -> dict:
     """
-    Perform semantic search using query embedding and Qdrant vector search.
+    Perform semantic search using query embedding and Qdrant vector search with caching.
     
     Args:
         query: Search query string
@@ -339,34 +423,50 @@ def semantic_search(query: str, top_k: int | None = None) -> dict:
     s = get_settings()
     top_k = top_k or s.MAX_TOP_K
     
+    def perform_vector_search(query_text: str, k: int) -> dict:
+        """Internal function to perform actual vector search"""
+        try:
+            # Embed the query with caching (queries are often repeated)
+            qvec = embed_single_text(query_text, file_path=None, chunk_id=f"query_{hash(query_text)}")
+            
+            # Perform Qdrant search
+            results = search(qvec, k)
+            
+            # Format results into clean JSON structure
+            items = []
+            for r in results:
+                payload = r.get("payload", {})
+                items.append({
+                    "score": float(r.get("score", 0.0)),
+                    "file_path": payload.get("file_path"),
+                    "file_name": payload.get("file_name"),
+                    "chunk": payload.get("chunk"),
+                    "chunk_index": payload.get("chunk_index"),
+                    "file_type": payload.get("file_type"),
+                    "file_size": payload.get("file_size"),
+                    "chunk_size": payload.get("chunk_size")
+                })
+            
+            return {
+                "query": query_text,
+                "top_k": k,
+                "results": items,
+                "total_results": len(items)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in vector search: {e}")
+            return {
+                "query": query_text,
+                "top_k": k,
+                "results": [],
+                "total_results": 0,
+                "error": str(e)
+            }
+    
     try:
-        # Embed the query
-        qvec = embed_texts([query])[0]
-        
-        # Perform Qdrant search
-        results = search(qvec, top_k)
-        
-        # Format results into clean JSON structure
-        items = []
-        for r in results:
-            payload = r.get("payload", {})
-            items.append({
-                "score": float(r.get("score", 0.0)),
-                "file_path": payload.get("file_path"),
-                "file_name": payload.get("file_name"),
-                "chunk": payload.get("chunk"),
-                "chunk_index": payload.get("chunk_index"),
-                "file_type": payload.get("file_type"),
-                "file_size": payload.get("file_size"),
-                "chunk_size": payload.get("chunk_size")
-            })
-        
-        return {
-            "query": query,
-            "top_k": top_k,
-            "results": items,
-            "total_results": len(items)
-        }
+        # Use cached search - checks cache first, then performs vector search if needed
+        return cached_search(query, top_k, perform_vector_search)
         
     except Exception as e:
         logger.error(f"Error in semantic search: {e}")
@@ -377,3 +477,77 @@ def semantic_search(query: str, top_k: int | None = None) -> dict:
             "total_results": 0,
             "error": str(e)
         }
+
+def invalidate_file_cache(file_path: str):
+    """
+    Invalidate cache entries for a specific file.
+    Call this when a file is updated or deleted.
+    
+    Args:
+        file_path: Path to the file to invalidate
+    """
+    cache = get_embedding_cache()
+    cache.invalidate_file(file_path)
+    logger.info(f"Invalidated embedding cache for file: {file_path}")
+
+def get_cache_stats() -> dict:
+    """
+    Get embedding cache statistics for monitoring.
+    
+    Returns:
+        dict: Cache statistics including hit rate, size, utilization
+    """
+    cache = get_embedding_cache()
+    return cache.get_stats()
+
+def clear_embedding_cache():
+    """Clear all embedding cache entries"""
+    cache = get_embedding_cache()
+    cache.clear()
+    logger.info("Embedding cache cleared")
+
+def get_search_cache_stats() -> dict:
+    """
+    Get search cache statistics for monitoring.
+    
+    Returns:
+        dict: Search cache statistics including hit rate, size, utilization
+    """
+    from embedding_cache import get_search_cache_stats
+    return get_search_cache_stats()
+
+def clear_search_cache():
+    """Clear all search cache entries"""
+    from embedding_cache import clear_search_cache
+    clear_search_cache()
+
+def get_combined_cache_stats() -> dict:
+    """Get combined statistics for both embedding and search caches"""
+    embedding_stats = get_cache_stats()
+    search_stats = get_search_cache_stats()
+    
+    return {
+        "embedding_cache": embedding_stats,
+        "search_cache": search_stats,
+        "total_cache_size_mb": embedding_stats.get('current_size_mb', 0) + search_stats.get('current_size_mb', 0)
+    }
+
+def reindex_file_with_cache_invalidation(file_path: str) -> dict:
+    """
+    Reindex a single file with cache invalidation.
+    Useful when a file is updated.
+    
+    Args:
+        file_path: Path to file to reindex
+        
+    Returns:
+        dict: Indexing summary
+    """
+    # First invalidate cache entries for this file
+    invalidate_file_cache(file_path)
+    
+    # Then reindex
+    result = index_files([file_path])
+    
+    # Search cache is already invalidated by index_files if successful
+    return result

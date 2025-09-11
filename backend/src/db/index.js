@@ -26,10 +26,11 @@ function initializeDatabase() {
     )
   `);
 
-  console.log('Database tables initialized successfully');
+  console.log('✅ 🗃️ Database tables initialized successfully');
 }
 
 // Initialize database on module load
+console.log('🗃️ Initializing SQLite database...');
 initializeDatabase();
 
 module.exports = {
@@ -39,8 +40,14 @@ module.exports = {
     const row = db.prepare('SELECT * FROM directories WHERE path = ?').get(path);
     return row;
   },
+  getDirectories() {
+    return db.prepare('SELECT * FROM directories').all();
+  },
   listDirectories() {
     return db.prepare('SELECT * FROM directories').all();
+  },
+  deleteDirectory(id) {
+    return db.prepare('DELETE FROM directories WHERE id = ?').run(id);
   },
   removeDirectory(path) {
     db.prepare('DELETE FROM directories WHERE path = ?').run(path);

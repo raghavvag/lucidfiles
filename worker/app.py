@@ -4,15 +4,28 @@ from typing import List, Optional
 import logging
 import os
 from pathlib import Path
-from indexer import index_files, semantic_search, parse_file_to_text
+from indexer import (
+    index_files, semantic_search, parse_file_to_text,
+    invalidate_file_cache, get_cache_stats, clear_embedding_cache,
+    reindex_file_with_cache_invalidation, get_search_cache_stats, 
+    clear_search_cache, get_combined_cache_stats
+)
 from qdrant_client_util import search, delete_points, search_by_file_path
 from utils import sha256_file
 from chunker import chunk_text
 from config import get_settings
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
+# Set up logging with better formatting
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(levelname)s:%(name)s: %(message)s'
+)
 logger = logging.getLogger(__name__)
+
+# Print startup banner
+print("="*80)
+print("🚀 LUCIDFILES SEMANTIC WORKER API STARTING...")
+print("="*80)
 
 app = FastAPI(
     title="Semantic Worker API", 
@@ -24,12 +37,30 @@ app = FastAPI(
 async def startup_event():
     """Initialize the embedding model on startup."""
     try:
-        logger.info("Loading embedding model on startup...")
+        print("🧠 Loading AI embedding model for semantic search...")
+        logger.info("📥 Initializing SentenceTransformer model...")
+        
         from indexer import get_model
         model = get_model()
-        logger.info(f"Model loaded successfully: {model.get_sentence_embedding_dimension()} dimensions")
+        
+        print(f"✅ AI Model loaded successfully!")
+        print(f"📏 Vector dimensions: {model.get_sentence_embedding_dimension()}")
+        print(f"🎯 Ready to process semantic searches!")
+        logger.info(f"🎉 Model initialization completed: {model.get_sentence_embedding_dimension()} dimensions")
+        
+        print("="*60)
+        print("🔥 SEMANTIC WORKER API IS READY FOR ACTION!")
+        print("🔍 Available endpoints:")
+        print("   • POST /search - Semantic document search")
+        print("   • POST /index-file - Index single file")
+        print("   • POST /index-directory - Index entire directory")
+        print("   • GET /cache/stats - View cache performance")
+        print("="*60)
+        
     except Exception as e:
-        logger.error(f"Failed to load model on startup: {e}")
+        print(f"❌ CRITICAL: Failed to load AI model!")
+        logger.error(f"💥 Model loading failed: {e}")
+        print("🚨 Worker service may not function properly without the model!")
         # Don't fail startup, let individual endpoints handle the error
 
 class IndexRequest(BaseModel):
@@ -115,11 +146,24 @@ def search_api(req: SearchRequest):
         Search results with scores and metadata
     """
     try:
-        logger.info(f"Search request for query: '{req.query}' with top_k: {req.top_k}")
+        query_display = req.query[:50] + ('...' if len(req.query) > 50 else '')
+        print(f"🔍 Search requested: '{query_display}'")
+        logger.info(f"🔎 Processing search query: '{req.query}' (top_k: {req.top_k})")
+        
         result = semantic_search(req.query, req.top_k)
+        
+        if result.get('cached'):
+            print(f"⚡ Search served from cache! Lightning fast response")
+        else:
+            print(f"🧮 Search computed via AI embeddings")
+        
+        results_count = result.get('total_results', 0)
+        print(f"📋 Found {results_count} relevant document chunks")
+        
         return result
     except Exception as e:
-        logger.error(f"Search failed: {e}")
+        print(f"❌ Search failed: {str(e)}")
+        logger.error(f"💥 Search operation failed: {e}")
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 @app.post("/index-directory")
@@ -193,17 +237,30 @@ def index_file_api(req: IndexFileRequest):
         file_path = Path(req.path)
         
         if not file_path.exists():
+            print(f"❌ File not found: {req.path}")
             raise HTTPException(status_code=404, detail=f"File not found: {req.path}")
         
         if not file_path.is_file():
+            print(f"❌ Path is not a file: {req.path}")
             raise HTTPException(status_code=400, detail=f"Path is not a file: {req.path}")
+        
+        print(f"📄 Indexing file: {file_path.name}")
+        logger.info(f"📥 Starting file indexing: {req.path}")
         
         # Calculate file metadata
         file_size = file_path.stat().st_size
         checksum = sha256_file(str(file_path))
         
+        print(f"🔢 File size: {file_size} bytes, Checksum: {checksum[:12]}...")
+        
         # Index the single file
         result = index_files([str(file_path)])
+        
+        if result["files_indexed"] > 0:
+            print(f"✅ File indexed successfully!")
+            print(f"📊 Created {result['chunks_indexed']} searchable chunks")
+        else:
+            print(f"⚠️  File indexing completed but no content was indexed")
         
         return {
             "success": result["files_indexed"] > 0,
@@ -218,7 +275,8 @@ def index_file_api(req: IndexFileRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"File indexing failed: {e}")
+        print(f"❌ File indexing failed: {str(e)}")
+        logger.error(f"💥 File indexing error: {e}")
         raise HTTPException(status_code=500, detail=f"File indexing failed: {str(e)}")
 
 @app.post("/reindex-file")
@@ -245,7 +303,11 @@ def reindex_file_api(req: ReindexFileRequest):
         file_size = file_path.stat().st_size
         checksum = sha256_file(str(file_path))
         
-                # First, try to remove existing entries for this file
+        # Use cache invalidation and reindexing
+        logger.info(f"Reindexing file with cache invalidation: {file_path.name}")
+        result = reindex_file_with_cache_invalidation(str(file_path))
+        
+        # Also remove existing entries from vector database
         try:
             # Try multiple path formats to find existing entries
             file_path_str = str(file_path.resolve())
@@ -277,9 +339,6 @@ def reindex_file_api(req: ReindexFileRequest):
             
         except Exception as delete_error:
             logger.warning(f"Could not remove existing entries for {file_path.name}: {delete_error}")
-        
-        # Re-index the file
-        result = index_files([str(file_path)])
         
         return {
             "success": result["files_indexed"] > 0,
@@ -464,6 +523,141 @@ def remove_file_api(req: RemoveFileRequest):
     except Exception as e:
         logger.error(f"File removal failed: {e}")
         raise HTTPException(status_code=500, detail=f"File removal failed: {str(e)}")
+
+# Cache Management Endpoints
+
+@app.get("/cache/stats")
+def get_cache_stats_api():
+    """
+    Get combined embedding and search cache statistics.
+    
+    Returns:
+        Dictionary with cache performance metrics for both caches
+    """
+    try:
+        stats = get_combined_cache_stats()
+        return {
+            "success": True,
+            "cache_stats": stats
+        }
+    except Exception as e:
+        logger.error(f"Cache stats error: {e}")
+        raise HTTPException(status_code=500, detail=f"Cache stats failed: {str(e)}")
+
+@app.get("/cache/embedding/stats")
+def get_embedding_cache_stats_api():
+    """
+    Get embedding cache statistics.
+    
+    Returns:
+        Dictionary with embedding cache performance metrics
+    """
+    try:
+        stats = get_cache_stats()
+        return {
+            "success": True,
+            "embedding_cache_stats": stats
+        }
+    except Exception as e:
+        logger.error(f"Embedding cache stats error: {e}")
+        raise HTTPException(status_code=500, detail=f"Embedding cache stats failed: {str(e)}")
+
+@app.get("/cache/search/stats")
+def get_search_cache_stats_api():
+    """
+    Get search cache statistics.
+    
+    Returns:
+        Dictionary with search cache performance metrics
+    """
+    try:
+        stats = get_search_cache_stats()
+        return {
+            "success": True,
+            "search_cache_stats": stats
+        }
+    except Exception as e:
+        logger.error(f"Search cache stats error: {e}")
+        raise HTTPException(status_code=500, detail=f"Search cache stats failed: {str(e)}")
+
+@app.post("/cache/clear")
+def clear_all_caches_api():
+    """
+    Clear all cache entries (both embedding and search caches).
+    
+    Returns:
+        Dictionary with clearing status
+    """
+    try:
+        clear_embedding_cache()
+        clear_search_cache()
+        return {
+            "success": True,
+            "message": "All caches cleared successfully"
+        }
+    except Exception as e:
+        logger.error(f"Cache clear error: {e}")
+        raise HTTPException(status_code=500, detail=f"Cache clear failed: {str(e)}")
+
+@app.post("/cache/embedding/clear")
+def clear_embedding_cache_api():
+    """
+    Clear embedding cache entries only.
+    
+    Returns:
+        Dictionary with clearing status
+    """
+    try:
+        clear_embedding_cache()
+        return {
+            "success": True,
+            "message": "Embedding cache cleared successfully"
+        }
+    except Exception as e:
+        logger.error(f"Embedding cache clear error: {e}")
+        raise HTTPException(status_code=500, detail=f"Embedding cache clear failed: {str(e)}")
+
+@app.post("/cache/search/clear")
+def clear_search_cache_api():
+    """
+    Clear search cache entries only.
+    
+    Returns:
+        Dictionary with clearing status
+    """
+    try:
+        clear_search_cache()
+        return {
+            "success": True,
+            "message": "Search cache cleared successfully"
+        }
+    except Exception as e:
+        logger.error(f"Search cache clear error: {e}")
+        raise HTTPException(status_code=500, detail=f"Search cache clear failed: {str(e)}")
+
+class CacheInvalidateFileRequest(BaseModel):
+    path: str
+
+@app.post("/cache/invalidate-file")
+def invalidate_file_cache_api(req: CacheInvalidateFileRequest):
+    """
+    Invalidate cache entries for a specific file.
+    
+    Args:
+        req: CacheInvalidateFileRequest containing file path
+        
+    Returns:
+        Dictionary with invalidation status
+    """
+    try:
+        invalidate_file_cache(req.path)
+        return {
+            "success": True,
+            "message": f"Cache invalidated for file: {req.path}"
+        }
+    except Exception as e:
+        logger.error(f"Cache invalidate error: {e}")
+        raise HTTPException(status_code=500, detail=f"Cache invalidate failed: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

@@ -42,3 +42,6 @@ langchain>=0.0.300
 
 # Community extensions for langchain
 langchain-community>=0.0.1
+
+# LRU cache implementation for Python
+cachetools>=5.3.0
