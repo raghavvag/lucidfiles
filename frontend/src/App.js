@@ -3,6 +3,8 @@ import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import ResultsList from './components/ResultsList_New';
 import PreviewPane from './components/PreviewPane_New';
+import PodcastButton from './components/PodcastButton';
+import CompactPodcastPlayer from './components/CompactPodcastPlayer';
 import { useTheme } from './hooks/useTheme';
 import { useUIState } from './hooks/useUIState';
 import { useSearch } from './hooks/useSearch';
@@ -26,6 +28,11 @@ function App() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [aiSummary, setAiSummary] = useState('');
   const [aiSummaryFile, setAiSummaryFile] = useState('');
+  
+  // Podcast state
+  const [showPodcastPlayer, setShowPodcastPlayer] = useState(false);
+  const [isPodcastGenerating, setIsPodcastGenerating] = useState(false);
+  const [selectedText, setSelectedText] = useState('');
 
   // Debounced search effect
   useEffect(() => {
@@ -59,6 +66,35 @@ function App() {
     setAiSummaryFile(fileName);
     switchTab('insight'); // Switch to AI Insights tab
   };
+
+  const handlePodcastClick = () => {
+    console.log('🎧 Podcast button clicked');
+    setShowPodcastPlayer(true);
+  };
+
+  const handleClosePodcastPlayer = () => {
+    setShowPodcastPlayer(false);
+    setIsPodcastGenerating(false);
+  };
+
+  // Function to extract selected text from the page
+  const getSelectedText = () => {
+    const selection = window.getSelection();
+    return selection ? selection.toString().trim() : '';
+  };
+
+  // Update selected text when user makes a selection
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const selected = getSelectedText();
+      if (selected && selected.length > 10) {
+        setSelectedText(selected);
+      }
+    };
+
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
+  }, []);
 
   return (
     <div className={`h-screen overflow-hidden font-inter transition-all duration-500 ${isDarkMode ? 'dark cyber-grid' : ''}`}>
@@ -96,6 +132,30 @@ function App() {
           aiSummaryFile={aiSummaryFile}
         />
       </div>
+
+      {/* Floating Podcast Button - Only show when player is not active */}
+      {!showPodcastPlayer && (
+        <PodcastButton
+          onClick={handlePodcastClick}
+          currentDocument={selectedFile}
+          selectedText={selectedText}
+          recommendations={results}
+          isVisible={true}
+          isGenerating={isPodcastGenerating}
+          setIsGenerating={setIsPodcastGenerating}
+        />
+      )}
+
+      {/* Compact Podcast Player */}
+      {showPodcastPlayer && (
+        <CompactPodcastPlayer
+          selectedText={selectedText || (selectedFile?.text || selectedFile?.content || '')}
+          relatedSections={results}
+          currentDocument={selectedFile}
+          onClose={handleClosePodcastPlayer}
+          isVisible={true}
+        />
+      )}
     </div>
   );
 }
