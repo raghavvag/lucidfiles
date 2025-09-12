@@ -52,9 +52,10 @@ async def startup_event():
         print("🔥 SEMANTIC WORKER API IS READY FOR ACTION!")
         print("🔍 Available endpoints:")
         print("   • POST /search - Semantic document search")
-        print("   • POST /index-file - Index single file")
-        print("   • POST /index-directory - Index entire directory")
+        print("   • POST /index-file - Index single file (with auto-OCR)")
+        print("   • POST /index-directory - Index entire directory (with auto-OCR)")
         print("   • GET /cache/stats - View cache performance")
+        print("🖼️  Auto-OCR Support: Images & Image-based PDFs processed automatically")
         print("="*60)
         
     except Exception as e:

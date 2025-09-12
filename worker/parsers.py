@@ -84,17 +84,27 @@ def parse_pdf(path: Path) -> str:
                     page = doc[page_num]
                     page_text = page.get_text("text")
                     
-                    # If no text found, try OCR (if available)
+                    # If no text found, try OCR on the page image
                     if not page_text.strip():
-                        logger.info(f"No text found on page {page_num + 1} of {path}, may be image-based")
-                        # For now, skip OCR but log the issue
-                        continue
+                        print(f"📄 PDF Page {page_num + 1}: No text found, attempting OCR...")
+                        logger.info(f"No text found on page {page_num + 1} of {path}, trying OCR")
+                        
+                        try:
+                            # Convert PDF page to image and run OCR
+                            page_text = _extract_text_from_pdf_page_ocr(page, page_num + 1, path.name)
+                            if page_text.strip():
+                                print(f"✅ PDF OCR: Extracted {len(page_text)} characters from page {page_num + 1}")
+                            else:
+                                print(f"⚠️  PDF OCR: No text found on page {page_num + 1}")
+                        except Exception as ocr_error:
+                            print(f"❌ PDF OCR failed on page {page_num + 1}: {ocr_error}")
+                            logger.warning(f"OCR failed for page {page_num + 1} of {path}: {ocr_error}")
+                            continue
                     
                     # Clean up text formatting
-                    page_text = re.sub(r'\n+', '\n', page_text)  # Multiple newlines to single
-                    page_text = re.sub(r' +', ' ', page_text)     # Multiple spaces to single
-                    
-                    if page_text.strip():  # Only add non-empty pages
+                    if page_text.strip():
+                        page_text = re.sub(r'\n+', '\n', page_text)  # Multiple newlines to single
+                        page_text = re.sub(r' +', ' ', page_text)     # Multiple spaces to single
                         texts.append(page_text.strip())
                         
                 except Exception as page_error:
@@ -186,34 +196,194 @@ def parse_image_ocr(path: Path) -> str:
     """
     try:
         if not path.exists():
+            print(f"❌ OCR: Image file not found: {path}")
             logger.warning(f"Image file not found: {path}")
             return ""
         
-        from PIL import Image
+        print(f"🖼️  OCR: Processing image {path.name}")
+        logger.info(f"🔍 Starting OCR processing for image: {path}")
+        
+        from PIL import Image, ImageEnhance, ImageFilter
         import pytesseract
+        
+        # Get file size for reporting
+        file_size = path.stat().st_size
+        print(f"📏 OCR: Image size: {file_size} bytes")
         
         # Open and process image
         with Image.open(str(path)) as img:
+            print(f"🎨 OCR: Image dimensions: {img.size[0]}x{img.size[1]} pixels, Mode: {img.mode}")
+            
             # Convert to RGB if needed
             if img.mode != 'RGB':
+                print(f"🔄 OCR: Converting image from {img.mode} to RGB")
                 img = img.convert('RGB')
             
-            # Extract text using OCR
-            text = pytesseract.image_to_string(img, lang='eng')
+            # Try multiple OCR approaches for better handwriting recognition
+            print(f"🤖 OCR: Extracting text using multiple configurations...")
+            
+            # Configuration 1: Standard OCR (current approach)
+            config1 = r'--oem 3 --psm 6'
+            text1 = pytesseract.image_to_string(img, lang='eng', config=config1)
+            
+            # Configuration 2: Better for handwriting - single text block
+            config2 = r'--oem 1 --psm 7'  # LSTM engine, single text line
+            text2 = pytesseract.image_to_string(img, lang='eng', config=config2)
+            
+            # Configuration 3: Enhanced preprocessing for handwriting
+            enhanced_img = _enhance_image_for_ocr(img)
+            config3 = r'--oem 3 --psm 3'  # Full page segmentation
+            text3 = pytesseract.image_to_string(enhanced_img, lang='eng', config=config3)
+            
+            # Choose the best result based on length and content quality
+            results = [
+                ("Standard OCR", text1),
+                ("Handwriting Mode", text2), 
+                ("Enhanced Preprocessing", text3)
+            ]
+            
+            # Select the longest non-empty result as it's likely the most complete
+            best_text = ""
+            best_method = "Standard OCR"
+            for method, text in results:
+                cleaned_text = text.strip()
+                if len(cleaned_text) > len(best_text):
+                    best_text = cleaned_text
+                    best_method = method
             
             # Clean up OCR text
-            text = re.sub(r'\n+', '\n', text)  # Multiple newlines to single
-            text = re.sub(r' +', ' ', text)     # Multiple spaces to single
+            text = re.sub(r'\n+', '\n', best_text)  # Multiple newlines to single
+            text = re.sub(r' +', ' ', text)         # Multiple spaces to single
             text = text.strip()
             
-            logger.debug(f"OCR parsed image: {path} ({len(text)} chars)")
+            if text:
+                print(f"✅ OCR: Successfully extracted {len(text)} characters using {best_method}")
+                print(f"📝 OCR: Text preview: {text[:100]}{'...' if len(text) > 100 else ''}")
+                logger.info(f"OCR success: {path.name} - extracted {len(text)} chars using {best_method}")
+            else:
+                print(f"⚠️  OCR: No text found in image with any method")
+                logger.warning(f"OCR found no text in image: {path}")
+            
             return text
             
-    except ImportError:
-        logger.warning("PIL or pytesseract not available for OCR")
+    except ImportError as e:
+        print(f"❌ OCR: Missing dependencies - PIL or pytesseract not available")
+        logger.error(f"OCR dependencies missing: {e}")
+        print("💡 OCR: Install with: pip install pillow pytesseract")
         return ""
     except Exception as e:
-        logger.warning(f"OCR failed for image {path}: {e}")
+        print(f"❌ OCR: Processing failed for {path.name}: {str(e)}")
+        logger.error(f"OCR failed for image {path}: {e}")
+        return ""
+
+def _enhance_image_for_ocr(img):
+    """
+    Enhance image for better OCR performance, especially for handwritten content.
+    
+    Args:
+        img: PIL Image object
+        
+    Returns:
+        Enhanced PIL Image object
+    """
+    try:
+        from PIL import Image, ImageEnhance, ImageFilter
+        
+        # Convert to grayscale for better OCR
+        if img.mode != 'L':
+            img = img.convert('L')
+        
+        # Enhance contrast
+        enhancer = ImageEnhance.Contrast(img)
+        img = enhancer.enhance(1.5)
+        
+        # Enhance sharpness
+        enhancer = ImageEnhance.Sharpness(img)
+        img = enhancer.enhance(2.0)
+        
+        # Apply slight blur to reduce noise
+        img = img.filter(ImageFilter.UnsharpMask(radius=1, percent=150, threshold=3))
+        
+        # Scale up image for better recognition
+        width, height = img.size
+        new_size = (int(width * 1.5), int(height * 1.5))
+        img = img.resize(new_size, Image.Resampling.LANCZOS)
+        
+        return img
+        
+    except Exception as e:
+        logger.warning(f"Image enhancement failed: {e}")
+        return img
+
+def _extract_text_from_pdf_page_ocr(page, page_num: int, pdf_name: str) -> str:
+    """
+    Extract text from a PDF page using OCR.
+    
+    Args:
+        page: PyMuPDF page object
+        page_num: Page number for logging
+        pdf_name: PDF filename for logging
+        
+    Returns:
+        str: Extracted text from the page
+    """
+    try:
+        from PIL import Image
+        import pytesseract
+        import io
+        
+        # Convert PDF page to image
+        # Use high resolution for better OCR
+        mat = fitz.Matrix(2.0, 2.0)  # 2x zoom for better quality
+        pix = page.get_pixmap(matrix=mat)
+        
+        # Convert to PIL Image
+        img_data = pix.tobytes("png")
+        img = Image.open(io.BytesIO(img_data))
+        
+        print(f"🔍 PDF OCR: Converting page {page_num} to image ({img.size[0]}x{img.size[1]} pixels)")
+        
+        # Apply the same enhancement as for regular images
+        enhanced_img = _enhance_image_for_ocr(img)
+        
+        # Use multiple OCR configurations
+        configs = [
+            r'--oem 3 --psm 6',  # Standard
+            r'--oem 1 --psm 3',  # LSTM with auto page segmentation  
+            r'--oem 3 --psm 1'   # Auto page segmentation with OSD
+        ]
+        
+        best_text = ""
+        best_method = "Standard"
+        
+        for i, config in enumerate(configs):
+            try:
+                method_names = ["Standard", "LSTM Auto", "Auto with OSD"]
+                text = pytesseract.image_to_string(enhanced_img, lang='eng', config=config)
+                text = text.strip()
+                
+                if len(text) > len(best_text):
+                    best_text = text
+                    best_method = method_names[i]
+                    
+            except Exception as config_error:
+                continue
+        
+        # Clean up the text
+        if best_text:
+            best_text = re.sub(r'\n+', '\n', best_text)
+            best_text = re.sub(r' +', ' ', best_text)
+            best_text = best_text.strip()
+            
+            print(f"🎯 PDF OCR: Best result from {best_method} method")
+        
+        return best_text
+        
+    except ImportError:
+        logger.warning("PIL or pytesseract not available for PDF OCR")
+        return ""
+    except Exception as e:
+        logger.warning(f"PDF page OCR failed: {e}")
         return ""
 
 def chunk_text(text: str, chunk_size: int, overlap: int) -> List[str]:
@@ -347,18 +517,40 @@ def parse_file(file_path: Path) -> str:
     try:
         parser = get_file_parser(file_path)
         if parser is None:
+            print(f"⚠️  Unsupported file format: {file_path.suffix} for {file_path.name}")
             logger.warning(f"Unsupported file format: {file_path.suffix} for file {file_path}")
             return ""
         
+        # Special handling for images and PDFs to show OCR status
+        if parser == parse_image_ocr:
+            print(f"🖼️  Detected image file: {file_path.name} - Using OCR")
+        elif parser == parse_pdf:
+            print(f"📄 Detected PDF file: {file_path.name} - Will use OCR for image-based pages")
+            
         result = parser(file_path)
         
         # Ensure we return a string
         if result is None:
             return ""
         
-        return str(result).strip()
+        parsed_result = str(result).strip()
+        
+        # Show success status for OCR specifically
+        if parser == parse_image_ocr:
+            if parsed_result:
+                print(f"✅ OCR completed successfully for {file_path.name}")
+            else:
+                print(f"⚠️  OCR completed but no text extracted from {file_path.name}")
+        elif parser == parse_pdf:
+            if parsed_result:
+                print(f"✅ PDF processing completed for {file_path.name} ({len(parsed_result)} characters)")
+            else:
+                print(f"⚠️  PDF processing completed but no text extracted from {file_path.name}")
+        
+        return parsed_result
         
     except Exception as e:
+        print(f"❌ Error parsing file {file_path.name}: {str(e)}")
         logger.error(f"Error parsing file {file_path}: {e}")
         # Return empty string instead of raising exception
         return ""

@@ -272,6 +272,7 @@ def get_model_info() -> dict:
 def parse_file_to_text(path: Path) -> str:
     """
     Parse a file to text based on its extension.
+    Uses the enhanced parsers module with OCR support.
     
     Args:
         path: Path to the file to parse
@@ -280,29 +281,26 @@ def parse_file_to_text(path: Path) -> str:
         str: Extracted text content, empty string if unsupported or failed
     """
     try:
+        # Use the enhanced parsers module instead of local functions
+        import parsers
+        
+        # Show file type being processed
         suffix = path.suffix.lower()
+        if suffix in [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff"]:
+            print(f"🖼️  Processing image file with OCR: {path.name}")
+            
+        result = parsers.parse_file(path)
         
-        # Text-based formats
-        if suffix in [".txt", ".md", ".py", ".js", ".ts", ".json", ".csv", ".log"]:
-            return parse_txt(path)
+        if suffix in [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff"]:
+            if result:
+                print(f"✅ OCR extraction complete: {len(result)} characters from {path.name}")
+            else:
+                print(f"⚠️  OCR completed but no text found in {path.name}")
         
-        # PDF format
-        if suffix in [".pdf"]:
-            return parse_pdf(path)
-        
-        # Word document format
-        if suffix in [".docx"]:
-            return parse_docx(path)
-        
-        # Image formats (OCR)
-        if suffix in [".png", ".jpg", ".jpeg", ".tiff"]:
-            return parse_image_ocr(path)
-        
-        # Unsupported types handled gracefully
-        logger.debug(f"Unsupported file type: {suffix} for file {path}")
-        return ""
+        return result
         
     except Exception as e:
+        print(f"❌ Failed to parse file {path.name}: {str(e)}")
         logger.warning(f"Failed to parse file {path}: {e}")
         return ""
 

@@ -4,6 +4,7 @@ const cors = require('cors');
 const directories = require('./routes/directories');
 const files = require('./routes/files');
 const search = require('./routes/search');
+const podcast = require('./routes/podcast');
 
 const app = express();
 app.use(cors());
@@ -13,6 +14,7 @@ app.use(morgan('dev'));
 app.use('/api', directories);
 app.use('/api', files);
 app.use('/api', search);
+app.use('/api', podcast);
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 

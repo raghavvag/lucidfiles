@@ -12,6 +12,8 @@ const PodcastGenerator = ({ selectedText, relatedSections, onClose, currentDocum
   const [totalDuration, setTotalDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
+  const [isFallback, setIsFallback] = useState(false);
+  const [podcastScript, setPodcastScript] = useState('');
 
   const generatePodcast = async () => {
     if (!selectedText && !currentDocument) {
@@ -24,38 +26,75 @@ const PodcastGenerator = ({ selectedText, relatedSections, onClose, currentDocum
     setAudioUrl(null);
 
     try {
-      console.log('🎧 Generating podcast...');
+      console.log('🎧 Generating podcast with ElevenLabs...');
       
-      // Simulate API call - replace with actual API endpoint
-      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080';
+      // Use the backend API endpoint
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
       
-      const response = await fetch(`${API_URL}/insights/generate-audio-overview`, {
+      const requestBody = {
+        selected_text: selectedText || currentDocument?.name || 'Document content',
+        related_sections: relatedSections || [],
+        audio_type: podcastType,
+        duration_minutes: duration
+      };
+
+      console.log('📡 Sending request to backend:', requestBody);
+
+      const response = await fetch(`${API_URL}/api/generate-podcast`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          selected_text: selectedText || currentDocument?.name || 'Document content',
-          related_sections: relatedSections || [],
-          audio_type: podcastType,
-          duration_minutes: duration
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
-        throw new Error('Podcast generation service unavailable. Please try again later.');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
       }
 
-      // Get the audio blob
+      // Check if this is a fallback response
+      const fallback = response.headers.get('X-Podcast-Fallback') === 'true';
+      const scriptBase64 = response.headers.get('X-Podcast-Script');
+      
+      setIsFallback(fallback);
+      
+      if (scriptBase64) {
+        try {
+          const decodedScript = atob(scriptBase64);
+          setPodcastScript(decodedScript);
+        } catch (e) {
+          console.warn('Could not decode podcast script from headers');
+        }
+      }
+
+      // Get the audio blob from the response (even if it's fallback audio)
       const audioBlob = await response.blob();
       const audioObjectUrl = URL.createObjectURL(audioBlob);
       
       setAudioUrl(audioObjectUrl);
-      console.log('✅ Podcast generated successfully');
+      
+      if (fallback) {
+        console.log('✅ Podcast generated with fallback audio (ElevenLabs unavailable)');
+      } else {
+        console.log('✅ Podcast generated successfully with ElevenLabs TTS');
+      }
       
     } catch (err) {
       console.error('❌ Podcast generation error:', err);
-      setError(`Podcast generation failed: ${err.message}`);
+      let errorMessage = 'Podcast generation failed. ';
+      
+      if (err.message.includes('API key')) {
+        errorMessage += 'Please check your ElevenLabs API configuration.';
+      } else if (err.message.includes('quota') || err.message.includes('limit')) {
+        errorMessage += 'API quota exceeded. Please try again later.';
+      } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+        errorMessage += 'Network connection failed. Please check your internet connection.';
+      } else {
+        errorMessage += err.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsGenerating(false);
     }
@@ -260,6 +299,31 @@ const PodcastGenerator = ({ selectedText, relatedSections, onClose, currentDocum
                   <h4 className="font-medium text-red-800 dark:text-red-200">Generation Failed</h4>
                   <p className="text-red-700 dark:text-red-300 text-sm mt-1">{error}</p>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Podcast Script Display (for fallback mode) */}
+          {podcastScript && isFallback && (
+            <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-xl p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-gradient-to-br from-yellow-500 to-orange-600 rounded-xl flex items-center justify-center">
+                  <span className="text-white text-lg">📜</span>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-yellow-900 dark:text-yellow-100">Podcast Script Generated</h3>
+                  <p className="text-yellow-700 dark:text-yellow-300 text-sm">Audio generation unavailable - showing script instead</p>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-gray-800 rounded-xl p-4 max-h-64 overflow-y-auto border">
+                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                  {podcastScript}
+                </p>
+              </div>
+              
+              <div className="mt-4 text-xs text-yellow-600 dark:text-yellow-400">
+                💡 To enable audio generation, configure ElevenLabs API in the backend settings.
               </div>
             </div>
           )}

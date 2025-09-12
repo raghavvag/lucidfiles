@@ -31,17 +31,50 @@ const CompactPodcastPlayer = ({
     setError(null);
 
     try {
-      // Simulate API call - replace with actual endpoint
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate generation time
+      console.log('🎧 Generating podcast with ElevenLabs...');
       
-      // For demo purposes, create a dummy audio URL
-      // In real implementation, this would be the response from your API
-      setAudioUrl('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmcfCCuJy+3MeSsFJHjC7d+USgyy'); // Dummy base64 audio
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
       
-      console.log('✅ Podcast generated successfully');
+      const requestBody = {
+        selected_text: selectedText || currentDocument?.name || 'Document content',
+        related_sections: relatedSections || [],
+        audio_type: 'overview', // Default to overview for compact player
+        duration_minutes: 3 // Default 3 minutes for compact player
+      };
+
+      const response = await fetch(`${API_URL}/api/generate-podcast`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      // Get the audio blob from the response
+      const audioBlob = await response.blob();
+      const audioObjectUrl = URL.createObjectURL(audioBlob);
+      
+      setAudioUrl(audioObjectUrl);
+      console.log('✅ Podcast generated successfully with ElevenLabs TTS');
+      
     } catch (err) {
       console.error('❌ Podcast generation error:', err);
-      setError('Failed to generate podcast. Please try again.');
+      let errorMessage = 'Failed to generate podcast. ';
+      
+      if (err.message.includes('API key')) {
+        errorMessage += 'Please check ElevenLabs API configuration.';
+      } else if (err.message.includes('quota') || err.message.includes('limit')) {
+        errorMessage += 'API quota exceeded. Please try again later.';
+      } else {
+        errorMessage += 'Please try again.';
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsGenerating(false);
     }
